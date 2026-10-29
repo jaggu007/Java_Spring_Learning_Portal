@@ -1,0 +1,224 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#10254b">
+  <meta name="description" content="Learn how Spring MVC binds URI path segments with @PathVariable, converts types, validates identifiers, and handles path matching errors.">
+  <title>Path Variables in Spring Boot | CS336B</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header>
+    <p class="eyebrow">Unit 5 · Spring Boot &amp; RESTful Web Services</p>
+    <h1>Path Variables in Spring Boot</h1>
+    <p class="lesson-subtitle">Capture resource identifiers from a URI path and bind them to strongly typed Spring MVC handler parameters.</p>
+  </header>
+
+  <main class="container lesson">
+    <nav class="nav" aria-label="Lesson navigation">
+      <a class="btn" href="request-body.html">← Previous: Request Body</a>
+      <a class="btn" href="unit5.html">Unit 5 Home</a>
+      <a class="btn" href="request-parameter.html">Next: Request Parameter →</a>
+    </nav>
+
+    <section class="lesson-section" aria-labelledby="outcomes">
+      <h2 id="outcomes">Learning outcomes</h2>
+      <p>After this lesson, you should be able to define path-variable mappings, bind one or more URI segments, convert identifiers to Java types, distinguish path variables from query parameters, and handle invalid or missing resources appropriately.</p>
+      <div class="callout">
+        <strong>Use a path variable to identify a resource.</strong> In <code>/api/courses/42</code>, <code>42</code> identifies the course. Use query parameters for optional filters, pagination, sorting, or other modifiers.
+      </div>
+    </section>
+
+    <section class="lesson-section" aria-labelledby="concept">
+      <h2 id="concept">1. What is a path variable?</h2>
+      <p>A path variable is a named value embedded in a URI path. In Spring MVC, curly braces declare a variable in a mapping, and <code>@PathVariable</code> binds the captured segment to a handler method parameter.</p>
+      <figure class="diagram">
+        <div class="mermaid" role="img" aria-label="Diagram showing the URI /api/courses/42 matched to the mapping /api/courses/{courseId}, with the value 42 bound to a long parameter.">
+flowchart LR
+    A["Request URI<br/>/api/courses/42"] --> B["Route template<br/>/api/courses/{courseId}"]
+    B --> C["Capture path segment<br/>courseId = '42'"]
+    C --> D["Convert String to long"]
+    D --> E["Invoke controller handler<br/>getCourse(42L)"]
+    E --> F{"Course exists?"}
+    F -->|Yes| G["Return course response"]
+    F -->|No| H["Return 404 Not Found"]
+        </div>
+        <figcaption>The path segment is initially textual; Spring converts it to the declared Java parameter type before invoking the handler.</figcaption>
+      </figure>
+    </section>
+
+    <section class="lesson-section" aria-labelledby="basic">
+      <h2 id="basic">2. Basic usage</h2>
+      <p>Declare a variable in the path mapping and annotate the corresponding parameter. Use an explicit annotation name when it improves readability or avoids reliance on Java parameter-name metadata.</p>
+      <pre><code>@RestController
+@RequestMapping("/api/courses")
+public class CourseController {
+    private final CourseService courseService;
+
+    public CourseController(CourseService courseService) {
+        this.courseService = courseService;
+    }
+
+    @GetMapping("/{courseId}")
+    public CourseResponse getCourse(
+            @PathVariable("courseId") long id) {
+        return courseService.findById(id);
+    }
+}</code></pre>
+      <p>The class-level mapping and method-level mapping combine to produce <code>/api/courses/{courseId}</code>. A request to <code>GET /api/courses/42</code> captures the text <code>42</code>, converts it to <code>long</code>, and invokes the handler.</p>
+    </section>
+
+    <section class="lesson-section" aria-labelledby="multiple">
+      <h2 id="multiple">3. Multiple path variables</h2>
+      <p>Nested resources can contain more than one variable. Each variable name in the path should correspond to a handler argument.</p>
+      <pre><code>@GetMapping("/{courseId}/students/{studentId}")
+public StudentResponse getStudentInCourse(
+        @PathVariable long courseId,
+        @PathVariable long studentId) {
+    return courseService.findStudent(courseId, studentId);
+}</code></pre>
+      <p>This maps <code>GET /api/courses/42/students/7</code> and binds <code>courseId</code> to <code>42</code> and <code>studentId</code> to <code>7</code>. The service should also verify that student <code>7</code> belongs to course <code>42</code>; capturing two IDs does not enforce that relationship.</p>
+      <p>You may use explicit names where parameter-name inference is uncertain:</p>
+      <pre><code>public StudentResponse getStudentInCourse(
+        @PathVariable("courseId") long course,
+        @PathVariable("studentId") long student) {
+    return courseService.findStudent(course, student);
+}</code></pre>
+    </section>
+
+    <section class="lesson-section" aria-labelledby="types">
+      <h2 id="types">4. Type conversion and identifier types</h2>
+      <p>Path values arrive as text and Spring MVC converts them to the declared parameter type using its conversion infrastructure. Common target types include <code>String</code>, numeric primitives/wrappers, <code>UUID</code>, and supported date/time types.</p>
+      <pre><code>@GetMapping("/by-key/{key}")
+public CourseResponse findByKey(@PathVariable UUID key) {
+    return courseService.findByKey(key);
+}</code></pre>
+      <ul>
+        <li>A numeric route such as <code>/api/courses/abc</code> cannot be converted to <code>long</code>; Spring returns a client error (commonly <code>400 Bad Request</code>).</li>
+        <li>A syntactically valid identifier can still refer to no resource; the service should report that as a not-found condition, typically mapped to <code>404 Not Found</code>.</li>
+        <li>Use wrapper types such as <code>Long</code> only when a value can legitimately be absent; path segments in a matched route are generally present.</li>
+        <li>For domain-specific identifier formats, consider a validated value object or an explicit converter rather than parsing inconsistently in every controller.</li>
+      </ul>
+    </section>
+
+    <section class="lesson-section" aria-labelledby="patterns">
+      <h2 id="patterns">5. Constrain path patterns</h2>
+      <p>When an endpoint needs a constrained segment, a path pattern can restrict what it matches. For example, a numeric expression avoids matching alphabetic values as a course ID route:</p>
+      <pre><code>@GetMapping("/{courseId:[0-9]+}")
+public CourseResponse getCourse(
+        @PathVariable long courseId) {
+    return courseService.findById(courseId);
+}</code></pre>
+      <p>Pattern constraints help route selection, but they do not replace business validation or authorization. Keep route patterns readable and avoid complex regular expressions that are difficult for clients and maintainers to understand.</p>
+      <h3>Static routes and variable routes</h3>
+      <pre><code>@GetMapping("/featured")
+public List&lt;CourseResponse&gt; featuredCourses() {
+    return courseService.findFeatured();
+}
+
+@GetMapping("/{courseId}")
+public CourseResponse getCourse(
+        @PathVariable long courseId) {
+    return courseService.findById(courseId);
+}</code></pre>
+      <p>Design static paths and variable paths together. A constrained numeric variable can help distinguish <code>/featured</code> from an ID route, but prefer clear, non-overlapping route designs over depending on subtle matching details.</p>
+    </section>
+
+    <section class="lesson-section" aria-labelledby="versus">
+      <h2 id="versus">6. Path variable vs. request parameter</h2>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Concern</th><th>Path variable</th><th>Request parameter</th></tr></thead>
+          <tbody>
+            <tr><td>Example</td><td><code>/api/courses/42</code></td><td><code>/api/courses?department=CS</code></td></tr>
+            <tr><td>Meaning</td><td>Identifies a resource or nested relationship.</td><td>Filters, paginates, sorts, or modifies a request.</td></tr>
+            <tr><td>Spring annotation</td><td><code>@PathVariable</code></td><td><code>@RequestParam</code></td></tr>
+            <tr><td>Usually required?</td><td>Yes, for that route pattern.</td><td>Can be optional or have a default.</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <pre><code>@GetMapping
+public Page&lt;CourseResponse&gt; searchCourses(
+        @RequestParam(required = false) String department,
+        @RequestParam(defaultValue = "0") int page,
+        @RequestParam(defaultValue = "20") int size) {
+    return courseService.search(department, page, size);
+}</code></pre>
+      <p>Use <code>/courses/{id}</code> to select one course; use <code>/courses?department=CS</code> to filter the collection.</p>
+    </section>
+
+    <section class="lesson-section" aria-labelledby="validation">
+      <h2 id="validation">7. Validate and authorize identifiers</h2>
+      <p>Binding a value only proves it could be converted to the Java type. It does not prove that the resource exists or that the caller may access it.</p>
+      <ol>
+        <li><strong>Syntax:</strong> ensure the segment can be converted or matches a required format.</li>
+        <li><strong>Existence:</strong> look up the resource and return a not-found response when it does not exist.</li>
+        <li><strong>Relationship:</strong> verify nested identifiers belong together, such as a student belonging to the requested course.</li>
+        <li><strong>Authorization:</strong> check whether the authenticated caller may access or modify that specific resource.</li>
+      </ol>
+      <p>For more complex validation, use a service or domain method so the same rules apply to every entry point. Do not rely on obscurity of sequential IDs as an access-control mechanism.</p>
+    </section>
+
+    <section class="lesson-section" aria-labelledby="errors">
+      <h2 id="errors">8. Common errors and troubleshooting</h2>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Symptom</th><th>Likely cause</th><th>Response / fix</th></tr></thead>
+          <tbody>
+            <tr><td><code>404 Not Found</code></td><td>Path does not match any mapping, or the identified resource does not exist.</td><td>Check the composed route and distinguish route-not-found from resource-not-found in the API contract.</td></tr>
+            <tr><td><code>400 Bad Request</code></td><td>Path value cannot be converted to the declared Java type.</td><td>Send the expected format; provide a clear error response if customizing conversion errors.</td></tr>
+            <tr><td>Argument binding error</td><td>Variable name in the mapping does not match the annotation name or inferred Java parameter name.</td><td>Use matching names or explicitly set <code>@PathVariable("name")</code>.</td></tr>
+            <tr><td>Wrong handler selected</td><td>Overlapping static and variable route patterns.</td><td>Make paths distinct or constrain the variable pattern and add mapping tests.</td></tr>
+            <tr><td>Resource exposure across tenants</td><td>Identifier lookup is not scoped to the caller’s authorization context.</td><td>Authorize access for the specific resource on every request.</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="lesson-section" aria-labelledby="testing">
+      <h2 id="testing">9. Test path-variable behavior</h2>
+      <p>Controller tests should cover a valid identifier, a resource that does not exist, an invalid identifier format, and nested-resource relationships where applicable.</p>
+      <pre><code>mockMvc.perform(get("/api/courses/42")
+        .accept(MediaType.APPLICATION_JSON))
+    .andExpect(status().isOk())
+    .andExpect(jsonPath("$.id").value(42));
+
+mockMvc.perform(get("/api/courses/not-a-number"))
+    .andExpect(status().isBadRequest());</code></pre>
+      <p>MockMvc test setup and exact error bodies depend on the application’s controller advice and framework version. Assert the public status and response contract rather than framework-specific conversion exception text.</p>
+    </section>
+
+    <section class="lesson-section" aria-labelledby="questions">
+      <h2 id="questions">Interview questions</h2>
+      <ol>
+        <li><strong>What does <code>@PathVariable</code> do?</strong><br>It binds a variable captured from the URI path to a controller method parameter.</li>
+        <li><strong>How does Spring convert a path segment to a number?</strong><br>Spring MVC’s conversion infrastructure converts the textual path value to the declared Java type; conversion failure becomes a client error.</li>
+        <li><strong>When should a path variable be used instead of a query parameter?</strong><br>Use a path variable to identify the resource; use a query parameter for optional collection filters and modifiers.</li>
+        <li><strong>Does a valid path variable guarantee the resource exists?</strong><br>No. Conversion only validates representation; application logic must perform the lookup.</li>
+        <li><strong>Does knowing a resource ID grant access to it?</strong><br>No. Authorization must be checked for the authenticated caller and the specific resource.</li>
+        <li><strong>How do you bind multiple path variables?</strong><br>Declare each named segment in the mapping and bind each with a matching <code>@PathVariable</code> parameter.</li>
+      </ol>
+    </section>
+
+    <section class="lesson-section" aria-labelledby="quiz">
+      <h2 id="quiz">Quick check</h2>
+      <ol class="quiz">
+        <li>Which URL uses a path variable to identify course 42?<br><span>A. /api/courses?id=42 &nbsp; B. /api/courses/42 &nbsp; C. /api/courses?course=all &nbsp; D. /api/course</span></li>
+        <li>What does successful conversion of a path variable prove?<br><span>A. The resource exists &nbsp; B. The caller is authorized &nbsp; C. The value can be represented as the declared Java type &nbsp; D. The operation succeeded</span></li>
+        <li>Which annotation binds a URI template variable to a controller argument?<br><span>A. @RequestBody &nbsp; B. @RequestParam &nbsp; C. @PathVariable &nbsp; D. @ResponseBody</span></li>
+      </ol>
+      <details class="answer-key">
+        <summary>Show answers</summary>
+        <p>1. B — <code>/api/courses/42</code>. 2. C — it proves type conversion succeeded, not existence or authorization. 3. C — <code>@PathVariable</code>.</p>
+      </details>
+    </section>
+  </main>
+  <script src="https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js"></script>
+  <script>
+    if (window.mermaid) {
+      mermaid.initialize({ startOnLoad: true, theme: "base" });
+    }
+  </script>
+</body>
+</html>

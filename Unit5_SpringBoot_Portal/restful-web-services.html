@@ -1,0 +1,283 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#10254b">
+  <meta name="description" content="Learn REST concepts and build robust HTTP APIs with Spring Boot, including resource design, HTTP methods, status codes, validation, error handling, and security.">
+  <title>Building RESTful Web Services | CS336B</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header>
+    <p class="eyebrow">Unit 5 · Spring Boot &amp; RESTful Web Services</p>
+    <h1>Building RESTful Web Services</h1>
+    <p class="lesson-subtitle">Design resource-oriented HTTP APIs and understand how Spring Boot maps requests, validates data, and returns meaningful responses.</p>
+  </header>
+
+  <main class="container lesson">
+    <nav class="nav" aria-label="Lesson navigation">
+      <a class="btn" href="logger.html">← Previous: Logging</a>
+      <a class="btn" href="unit5.html">Unit 5 Home</a>
+      <a class="btn" href="rest-controller.html">Next: REST Controller →</a>
+    </nav>
+
+    <section class="lesson-section" aria-labelledby="outcomes">
+      <h2 id="outcomes">Learning outcomes</h2>
+      <p>After this lesson, you should be able to explain REST and HTTP resource modeling, select HTTP methods and status codes, design predictable endpoints, and describe how Spring Boot handles JSON requests and responses.</p>
+      <div class="callout">
+        <strong>REST is an architectural style, not a Spring annotation.</strong> Spring MVC provides the HTTP infrastructure; application design determines whether an API uses resources, methods, representations, and status codes coherently.
+      </div>
+    </section>
+
+    <section class="lesson-section" aria-labelledby="rest">
+      <h2 id="rest">1. REST and resources</h2>
+      <p>Representational State Transfer (REST) is an architectural style for distributed systems. A RESTful API exposes resources identified by URIs. Clients use HTTP methods to act on those resources, and exchange representations—commonly JSON—rather than directly manipulating server-side objects.</p>
+      <p>For a course API, possible resources include:</p>
+      <ul>
+        <li><code>/api/courses</code> — the collection of courses.</li>
+        <li><code>/api/courses/42</code> — the course identified by <code>42</code>.</li>
+        <li><code>/api/courses/42/students</code> — students associated with that course, when the relationship is part of the API design.</li>
+      </ul>
+      <p>Resource names are generally nouns. HTTP methods communicate the action. Prefer <code>GET /api/courses/42</code> over action-oriented paths such as <code>/api/getCourse?id=42</code>.</p>
+      <h3>Common REST constraints</h3>
+      <ul>
+        <li><strong>Client-server:</strong> separates the user interface from data and service concerns.</li>
+        <li><strong>Stateless:</strong> each request contains the context needed to process it; the server does not rely on hidden client session state between requests.</li>
+        <li><strong>Cacheable:</strong> responses indicate whether they may be cached and for how long where appropriate.</li>
+        <li><strong>Uniform interface:</strong> resources, representations, and standard HTTP semantics are used consistently.</li>
+        <li><strong>Layered system:</strong> clients need not know whether they communicate through proxies, gateways, or other intermediaries.</li>
+        <li><strong>Code on demand (optional):</strong> a server may provide executable code to clients, though this is uncommon for typical JSON APIs.</li>
+      </ul>
+    </section>
+
+    <section class="lesson-section" aria-labelledby="methods">
+      <h2 id="methods">2. HTTP methods and their semantics</h2>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Method</th><th>Typical purpose</th><th>Safe?</th><th>Idempotent?</th></tr></thead>
+          <tbody>
+            <tr><td><code>GET</code></td><td>Retrieve a resource or collection.</td><td>Yes</td><td>Yes</td></tr>
+            <tr><td><code>POST</code></td><td>Create a subordinate resource or submit a processing request.</td><td>No</td><td>Not generally</td></tr>
+            <tr><td><code>PUT</code></td><td>Create or replace the state at a known resource URI.</td><td>No</td><td>Yes</td></tr>
+            <tr><td><code>PATCH</code></td><td>Apply a partial modification to a resource.</td><td>No</td><td>Not inherently; depends on the patch operation</td></tr>
+            <tr><td><code>DELETE</code></td><td>Remove a resource.</td><td>No</td><td>Yes, in intended effect</td></tr>
+            <tr><td><code>HEAD</code></td><td>Retrieve response headers without the response body.</td><td>Yes</td><td>Yes</td></tr>
+            <tr><td><code>OPTIONS</code></td><td>Discover communication options for a resource; also used in CORS preflight.</td><td>Yes</td><td>Yes</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p><strong>Safe</strong> means the request is defined as read-only. <strong>Idempotent</strong> means repeating the same request has the same intended effect as making it once; the response itself need not be identical. A <code>DELETE</code> can return a different status on a repeated request while remaining idempotent in effect.</p>
+    </section>
+
+    <section class="lesson-section" aria-labelledby="status">
+      <h2 id="status">3. HTTP status codes</h2>
+      <p>Use status codes to communicate the outcome at the HTTP layer. The response body can provide additional details, but clients should not have to infer success or failure from a message string alone.</p>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Status</th><th>Meaning</th><th>Common use</th></tr></thead>
+          <tbody>
+            <tr><td><code>200 OK</code></td><td>Request succeeded.</td><td>Successful read or update with a response representation.</td></tr>
+            <tr><td><code>201 Created</code></td><td>A resource was created.</td><td>Successful creation; include a <code>Location</code> header when practical.</td></tr>
+            <tr><td><code>202 Accepted</code></td><td>Request accepted for later processing.</td><td>Asynchronous job submitted but not yet completed.</td></tr>
+            <tr><td><code>204 No Content</code></td><td>Request succeeded with no response body.</td><td>Successful delete or update that returns no representation.</td></tr>
+            <tr><td><code>400 Bad Request</code></td><td>Request is malformed or has invalid input.</td><td>Validation failure or syntactically invalid request.</td></tr>
+            <tr><td><code>401 Unauthorized</code></td><td>Authentication is absent or invalid.</td><td>Client must authenticate; despite its name, this means unauthenticated.</td></tr>
+            <tr><td><code>403 Forbidden</code></td><td>Client is authenticated but not allowed.</td><td>Authorization failure.</td></tr>
+            <tr><td><code>404 Not Found</code></td><td>Target resource does not exist or is not exposed.</td><td>Unknown resource identifier.</td></tr>
+            <tr><td><code>409 Conflict</code></td><td>Request conflicts with current resource state.</td><td>Duplicate unique value or conflicting update.</td></tr>
+            <tr><td><code>415 Unsupported Media Type</code></td><td>Request representation format is unsupported.</td><td>Wrong or missing <code>Content-Type</code> for a request body.</td></tr>
+            <tr><td><code>500 Internal Server Error</code></td><td>Unexpected server failure.</td><td>Unanticipated error; do not expose internal stack traces.</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="lesson-section" aria-labelledby="design">
+      <h2 id="design">4. Designing predictable endpoints</h2>
+      <p>Use consistent collection and item paths. Keep filters and sorting in query parameters; use path segments to identify a specific resource.</p>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Operation</th><th>Request</th><th>Typical response</th></tr></thead>
+          <tbody>
+            <tr><td>List courses</td><td><code>GET /api/courses?page=0&amp;size=20</code></td><td><code>200 OK</code> with a page of course representations.</td></tr>
+            <tr><td>Read course</td><td><code>GET /api/courses/42</code></td><td><code>200 OK</code> or <code>404 Not Found</code>.</td></tr>
+            <tr><td>Create course</td><td><code>POST /api/courses</code> with JSON</td><td><code>201 Created</code>, ideally with a <code>Location</code> header.</td></tr>
+            <tr><td>Replace course</td><td><code>PUT /api/courses/42</code> with a complete representation</td><td><code>200 OK</code> with representation or <code>204 No Content</code>.</td></tr>
+            <tr><td>Partially update</td><td><code>PATCH /api/courses/42</code> with a documented patch format</td><td><code>200 OK</code> or <code>204 No Content</code>.</td></tr>
+            <tr><td>Delete course</td><td><code>DELETE /api/courses/42</code></td><td><code>204 No Content</code> or a documented alternative.</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <ul>
+        <li>Use plural collection names consistently, such as <code>/courses</code>.</li>
+        <li>Use query parameters for filtering, pagination, and sorting, such as <code>?status=active&amp;page=0&amp;size=20</code>.</li>
+        <li>Set sensible maximum page sizes and validate client-supplied values.</li>
+        <li>Document whether an endpoint returns a complete resource, a summary, or a collection envelope.</li>
+        <li>Use a consistent API versioning strategy if compatibility requirements call for one; versioning can be done in paths or through media types, and should be deliberate.</li>
+        <li>Use cache headers and conditional requests where the resource and client behavior benefit from caching.</li>
+      </ul>
+    </section>
+
+    <section class="lesson-section" aria-labelledby="representations">
+      <h2 id="representations">5. Representations, headers, and content negotiation</h2>
+      <p>HTTP headers describe the request and response. The body carries the representation.</p>
+      <ul>
+        <li><code>Content-Type</code> describes the request or response body format, commonly <code>application/json</code>.</li>
+        <li><code>Accept</code> tells the server which response media types the client can handle.</li>
+        <li><code>Location</code> identifies a newly created resource, commonly returned with <code>201 Created</code>.</li>
+        <li><code>Cache-Control</code>, <code>ETag</code>, and <code>Last-Modified</code> can support caching and conditional requests.</li>
+      </ul>
+      <p>Spring Boot web applications typically use Jackson to serialize Java objects to JSON and deserialize JSON request bodies. Keep the public representation intentional: API DTOs allow internal persistence models to change without silently changing the API contract.</p>
+      <pre><code>{
+  "id": 42,
+  "code": "CS336B",
+  "title": "OOPS with Java"
+}</code></pre>
+    </section>
+
+    <section class="lesson-section" aria-labelledby="spring">
+      <h2 id="spring">6. A REST endpoint in Spring Boot</h2>
+      <p>The following example shows a small HTTP boundary. <code>@RestController</code> marks the class as a controller whose return values are written to the response body. <code>@GetMapping</code> maps an HTTP GET request to a handler method.</p>
+      <pre><code>package com.example.course.controller;
+
+import java.util.List;
+
+import org.springframework.http.HttpStatus;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.ResponseStatus;
+import org.springframework.web.bind.annotation.RestController;
+
+@RestController
+@RequestMapping("/api/courses")
+public class CourseController {
+    private final CourseService courseService;
+
+    public CourseController(CourseService courseService) {
+        this.courseService = courseService;
+    }
+
+    @GetMapping
+    public List&lt;CourseResponse&gt; listCourses() {
+        return courseService.findAll();
+    }
+
+    @GetMapping("/{id}")
+    public CourseResponse getCourse(@PathVariable long id) {
+        return courseService.findById(id);
+    }
+
+    @PostMapping
+    @ResponseStatus(HttpStatus.CREATED)
+    public CourseResponse createCourse(
+            @RequestBody CreateCourseRequest request) {
+        return courseService.create(request);
+    }
+}</code></pre>
+      <p><code>CourseService</code>, <code>CourseResponse</code>, and <code>CreateCourseRequest</code> represent application-layer types supplied by the application. In a production API, requests should be validated and persistence should normally be handled behind the service boundary.</p>
+    </section>
+
+    <section class="lesson-section" aria-labelledby="dto">
+      <h2 id="dto">7. DTOs and request validation</h2>
+      <p>A data transfer object (DTO) defines the data accepted or returned by an endpoint. Separate request and response DTOs prevent clients from setting server-owned fields such as database IDs or administrative flags.</p>
+      <pre><code>package com.example.course.dto;
+
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.Size;
+
+public record CreateCourseRequest(
+        @NotBlank
+        @Size(max = 20)
+        String code,
+
+        @NotBlank
+        @Size(max = 120)
+        String title
+) {}</code></pre>
+      <p>Trigger Bean Validation by placing <code>@Valid</code> on the request body parameter. Include the validation starter (commonly <code>spring-boot-starter-validation</code>) in the build when it is not already present.</p>
+      <pre><code>import jakarta.validation.Valid;
+
+@PostMapping
+@ResponseStatus(HttpStatus.CREATED)
+public CourseResponse createCourse(
+        @Valid @RequestBody CreateCourseRequest request) {
+    return courseService.create(request);
+}</code></pre>
+      <p>Validation should protect both the API boundary and domain invariants. A syntactically valid request may still fail a business rule—for example, attempting to create a course with a code that already exists.</p>
+    </section>
+
+    <section class="lesson-section" aria-labelledby="errors">
+      <h2 id="errors">8. Consistent error responses</h2>
+      <p>Return a stable, documented error shape and an appropriate HTTP status. Do not send Java stack traces, SQL details, or internal exception messages to clients. Spring Framework supports the standard <code>ProblemDetail</code> response model for HTTP API errors.</p>
+      <pre><code>{
+  "type": "about:blank",
+  "title": "Not Found",
+  "status": 404,
+  "detail": "Course 42 was not found",
+  "instance": "/api/courses/42"
+}</code></pre>
+      <p>Centralize exception-to-response mapping with <code>@RestControllerAdvice</code> and <code>@ExceptionHandler</code> when multiple controllers need the same policy. Use distinct handling for validation errors, missing resources, conflicts, and unexpected failures. Log unexpected server failures with a correlation ID, while returning only safe client-facing details.</p>
+    </section>
+
+    <section class="lesson-section" aria-labelledby="curl">
+      <h2 id="curl">9. Calling the API</h2>
+      <p>Example request to retrieve a course:</p>
+      <pre><code>curl -i \
+  -H "Accept: application/json" \
+  http://localhost:8080/api/courses/42</code></pre>
+      <p>Example JSON creation request:</p>
+      <pre><code>curl -i \
+  -X POST \
+  -H "Content-Type: application/json" \
+  -H "Accept: application/json" \
+  -d '{"code":"CS336B","title":"OOPS with Java"}' \
+  http://localhost:8080/api/courses</code></pre>
+      <p>Inspect the status line and headers as well as the response body. A successful POST should report creation using the agreed status and, where available, a resource location.</p>
+    </section>
+
+    <section class="lesson-section" aria-labelledby="security">
+      <h2 id="security">10. API security and reliability</h2>
+      <ul>
+        <li><strong>Authenticate and authorize:</strong> use a security mechanism appropriate to the application, and check authorization for each resource operation.</li>
+        <li><strong>Use HTTPS:</strong> protect credentials and data in transit.</li>
+        <li><strong>Validate input:</strong> enforce size, format, range, and business constraints; do not trust client-provided IDs or roles.</li>
+        <li><strong>Prevent excessive resource use:</strong> cap page sizes and request sizes, and apply appropriate rate limits.</li>
+        <li><strong>Handle concurrent updates:</strong> consider optimistic locking with entity versions or conditional requests such as <code>ETag</code> and <code>If-Match</code>.</li>
+        <li><strong>Protect against duplicate submissions:</strong> where clients may retry creation after a timeout, consider an idempotency key and define its semantics.</li>
+        <li><strong>Configure CORS narrowly:</strong> allow only intended browser origins, methods, and headers; CORS is not authentication.</li>
+        <li><strong>Document the contract:</strong> describe endpoints, schemas, statuses, and authentication so clients can integrate safely.</li>
+      </ul>
+    </section>
+
+    <section class="lesson-section" aria-labelledby="questions">
+      <h2 id="questions">Interview questions</h2>
+      <ol>
+        <li><strong>What is a resource in REST?</strong><br>A conceptual entity identified by a URI and represented through data exchanged between client and server.</li>
+        <li><strong>What is the difference between safe and idempotent HTTP methods?</strong><br>Safe methods are intended to read without changing server state; idempotent methods have the same intended effect when repeated.</li>
+        <li><strong>When should a create endpoint return <code>201 Created</code>?</strong><br>When the request successfully creates a resource; the response can identify it with a <code>Location</code> header.</li>
+        <li><strong>Why use request and response DTOs?</strong><br>They define and validate the API contract without exposing persistence details or allowing clients to set server-controlled fields.</li>
+        <li><strong>What is content negotiation?</strong><br>The client and server use headers such as <code>Accept</code> and <code>Content-Type</code> to agree on representation formats.</li>
+        <li><strong>Why is <code>401</code> different from <code>403</code>?</strong><br><code>401</code> means valid authentication is missing or absent; <code>403</code> means the authenticated client is not permitted to perform the operation.</li>
+      </ol>
+    </section>
+
+    <section class="lesson-section" aria-labelledby="quiz">
+      <h2 id="quiz">Quick check</h2>
+      <ol class="quiz">
+        <li>Which method is generally used to retrieve a resource without changing it?<br><span>A. POST &nbsp; B. GET &nbsp; C. PATCH &nbsp; D. DELETE</span></li>
+        <li>Which status code most directly indicates successful resource creation?<br><span>A. 200 &nbsp; B. 201 &nbsp; C. 204 &nbsp; D. 404</span></li>
+        <li>Which header describes the media type of a JSON request body?<br><span>A. Accept &nbsp; B. Location &nbsp; C. Content-Type &nbsp; D. Cache-Control</span></li>
+        <li>What is a key reason for using DTOs at an API boundary?<br><span>A. To bypass HTTP status codes &nbsp; B. To control and validate the public request/response contract &nbsp; C. To disable JSON &nbsp; D. To replace authentication</span></li>
+      </ol>
+      <details class="answer-key">
+        <summary>Show answers</summary>
+        <p>1. B — <code>GET</code>. 2. B — <code>201 Created</code>. 3. C — <code>Content-Type</code>. 4. B — DTOs define and protect the API contract.</p>
+      </details>
+    </section>
+  </main>
+</body>
+</html>

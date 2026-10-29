@@ -1,0 +1,299 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#10254b">
+  <meta name="description" content="Learn how Spring REST controllers handle HTTP requests and JSON responses using @RestController, request binding, validation, response types, and exception handling.">
+  <title>REST Controller in Spring Boot | CS336B</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header>
+    <p class="eyebrow">Unit 5 · Spring Boot &amp; RESTful Web Services</p>
+    <h1>REST Controller in Spring Boot</h1>
+    <p class="lesson-subtitle">Map HTTP requests to Java methods and return clear, validated API responses with Spring MVC.</p>
+  </header>
+
+  <main class="container lesson">
+    <nav class="nav" aria-label="Lesson navigation">
+      <a class="btn" href="restful-web-services.html">← Previous: RESTful Web Services</a>
+      <a class="btn" href="unit5.html">Unit 5 Home</a>
+      <a class="btn" href="request-mapping.html">Next: Request Mapping →</a>
+    </nav>
+
+    <section class="lesson-section" aria-labelledby="outcomes">
+      <h2 id="outcomes">Learning outcomes</h2>
+      <p>After this lesson, you should be able to explain <code>@RestController</code>, map requests to handler methods, bind path/query/header/body data, return appropriate responses, validate input, and handle errors consistently.</p>
+      <div class="callout">
+        <strong>Controller responsibility:</strong> translate HTTP input into an application call and translate the result into an HTTP response. Keep business rules and persistence logic in service and repository layers rather than growing the controller into the whole application.
+      </div>
+    </section>
+
+    <section class="lesson-section" aria-labelledby="controller">
+      <h2 id="controller">1. What is a REST controller?</h2>
+      <p>Spring MVC uses annotated controller classes to handle HTTP requests. <code>@RestController</code> is a composed annotation that combines <code>@Controller</code> and <code>@ResponseBody</code>. As a result, handler return values are written to the HTTP response body and converted by an <code>HttpMessageConverter</code>, rather than being interpreted as view names.</p>
+      <p>For JSON APIs, Spring Boot commonly configures Jackson-backed converters when the relevant web and JSON dependencies are present:</p>
+      <ul>
+        <li>Incoming JSON is deserialized into a Java request type.</li>
+        <li>The controller invokes application logic.</li>
+        <li>A returned Java response type is serialized to JSON.</li>
+        <li>The HTTP response carries a status, headers, and optional body.</li>
+      </ul>
+      <pre><code>import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RestController;
+
+@RestController
+@RequestMapping("/api/courses")
+public class CourseController {
+    // Handler methods are declared here.
+}</code></pre>
+    </section>
+
+    <section class="lesson-section" aria-labelledby="mapping">
+      <h2 id="mapping">2. Mapping requests to handler methods</h2>
+      <p>Use method-specific annotations such as <code>@GetMapping</code>, <code>@PostMapping</code>, <code>@PutMapping</code>, <code>@PatchMapping</code>, and <code>@DeleteMapping</code>. A class-level <code>@RequestMapping</code> provides a shared path prefix; method-level mappings describe individual operations.</p>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Annotation</th><th>HTTP method</th><th>Example intent</th></tr></thead>
+          <tbody>
+            <tr><td><code>@GetMapping</code></td><td>GET</td><td>Read a resource or collection.</td></tr>
+            <tr><td><code>@PostMapping</code></td><td>POST</td><td>Create a resource or submit a command.</td></tr>
+            <tr><td><code>@PutMapping</code></td><td>PUT</td><td>Replace a resource at a known URI.</td></tr>
+            <tr><td><code>@PatchMapping</code></td><td>PATCH</td><td>Apply a documented partial modification.</td></tr>
+            <tr><td><code>@DeleteMapping</code></td><td>DELETE</td><td>Delete a resource.</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p>Mappings can also constrain the request by <code>consumes</code> and <code>produces</code> media types or by request parameters and headers. A request that does not match these conditions may result in an HTTP 4xx response such as <code>404</code>, <code>405</code>, or <code>406</code>, depending on what failed.</p>
+    </section>
+
+    <section class="lesson-section" aria-labelledby="binding">
+      <h2 id="binding">3. Bind request data</h2>
+      <p>Spring MVC provides annotations for common parts of an HTTP request:</p>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Annotation</th><th>Source</th><th>Example</th></tr></thead>
+          <tbody>
+            <tr><td><code>@PathVariable</code></td><td>A named path segment.</td><td><code>/api/courses/{id}</code></td></tr>
+            <tr><td><code>@RequestParam</code></td><td>A query parameter or form parameter.</td><td><code>?page=0&amp;size=20</code></td></tr>
+            <tr><td><code>@RequestHeader</code></td><td>An HTTP request header.</td><td><code>Accept-Language</code></td></tr>
+            <tr><td><code>@RequestBody</code></td><td>The request body, converted from JSON or another supported format.</td><td>JSON create/update request.</td></tr>
+            <tr><td><code>@CookieValue</code></td><td>A named cookie.</td><td>Application-specific cookie data.</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p>Use explicit names when they improve clarity. Make optionality clear with <code>required = false</code> or a suitable default value, and validate values at the boundary.</p>
+      <pre><code>@GetMapping("/{id}")
+public CourseResponse getCourse(
+        @PathVariable("id") long courseId,
+        @RequestParam(defaultValue = "false") boolean includeStudents,
+        @RequestHeader(name = "Accept-Language", required = false)
+        String language) {
+    return courseService.findCourse(courseId, includeStudents, language);
+}</code></pre>
+    </section>
+
+    <section class="lesson-section" aria-labelledby="responses">
+      <h2 id="responses">4. Return response bodies, statuses, and headers</h2>
+      <p>When a simple fixed status is sufficient, <code>@ResponseStatus</code> can declare it. Use <code>ResponseEntity&lt;T&gt;</code> when the status or headers are determined dynamically, such as a resource creation response with a <code>Location</code> header.</p>
+      <h3>Return a created resource with a Location header</h3>
+      <pre><code>import java.net.URI;
+
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.util.UriComponentsBuilder;
+
+@PostMapping
+public ResponseEntity&lt;CourseResponse&gt; createCourse(
+        @Valid @RequestBody CreateCourseRequest request,
+        UriComponentsBuilder uriBuilder) {
+    CourseResponse created = courseService.create(request);
+    URI location = uriBuilder
+            .path("/api/courses/{id}")
+            .buildAndExpand(created.id())
+            .toUri();
+
+    return ResponseEntity.created(location).body(created);
+}</code></pre>
+      <p>Use <code>204 No Content</code> when a successful operation intentionally returns no body. Do not return <code>200 OK</code> with an empty body by habit if a more precise status communicates the outcome better.</p>
+    </section>
+
+    <section class="lesson-section" aria-labelledby="complete-example">
+      <h2 id="complete-example">5. A small controller with a service boundary</h2>
+      <p>This example demonstrates constructor injection and maps common operations for a course resource. The service and DTO types represent application code and should be defined separately.</p>
+      <pre><code>package com.example.course.controller;
+
+import java.util.List;
+
+import jakarta.validation.Valid;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.DeleteMapping;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RestController;
+
+@RestController
+@RequestMapping("/api/courses")
+public class CourseController {
+    private final CourseService courseService;
+
+    public CourseController(CourseService courseService) {
+        this.courseService = courseService;
+    }
+
+    @GetMapping
+    public List&lt;CourseResponse&gt; listCourses() {
+        return courseService.findAll();
+    }
+
+    @GetMapping("/{id}")
+    public CourseResponse getCourse(@PathVariable long id) {
+        return courseService.findById(id);
+    }
+
+    @PostMapping
+    public ResponseEntity&lt;CourseResponse&gt; createCourse(
+            @Valid @RequestBody CreateCourseRequest request) {
+        CourseResponse created = courseService.create(request);
+        return ResponseEntity.status(HttpStatus.CREATED).body(created);
+    }
+
+    @PutMapping("/{id}")
+    public CourseResponse replaceCourse(
+            @PathVariable long id,
+            @Valid @RequestBody UpdateCourseRequest request) {
+        return courseService.replace(id, request);
+    }
+
+    @DeleteMapping("/{id}")
+    public ResponseEntity&lt;Void&gt; deleteCourse(@PathVariable long id) {
+        courseService.delete(id);
+        return ResponseEntity.noContent().build();
+    }
+}</code></pre>
+      <p>For a complete create response, add a <code>Location</code> header as shown above. The example uses <code>ResponseEntity</code> to make the status explicit; another controller can use <code>@ResponseStatus(HttpStatus.CREATED)</code> when the status is fixed.</p>
+    </section>
+
+    <section class="lesson-section" aria-labelledby="validation">
+      <h2 id="validation">6. Validate request bodies</h2>
+      <p>Use Jakarta Bean Validation constraints on DTO fields and place <code>@Valid</code> before <code>@RequestBody</code>. Include Spring Boot’s validation starter if it is not already part of the application.</p>
+      <pre><code>import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.Size;
+
+public record CreateCourseRequest(
+        @NotBlank
+        @Size(max = 20)
+        String code,
+
+        @NotBlank
+        @Size(max = 120)
+        String title
+) {}</code></pre>
+      <p>Validation failures are request errors and should produce a clear 4xx response. Validation is not a replacement for business checks such as ensuring the course code is unique; those checks belong in the application/domain layer and can produce a conflict response.</p>
+    </section>
+
+    <section class="lesson-section" aria-labelledby="errors">
+      <h2 id="errors">7. Handle errors consistently</h2>
+      <p>A controller can throw a domain-specific exception when a resource is not found. A shared <code>@RestControllerAdvice</code> can translate it to a stable response across controllers. Spring supports <code>ProblemDetail</code> for standardized HTTP API errors.</p>
+      <pre><code>import org.springframework.http.HttpStatus;
+import org.springframework.http.ProblemDetail;
+import org.springframework.web.bind.annotation.ExceptionHandler;
+import org.springframework.web.bind.annotation.RestControllerAdvice;
+
+@RestControllerAdvice
+public class ApiExceptionHandler {
+    @ExceptionHandler(CourseNotFoundException.class)
+    ProblemDetail handleNotFound(CourseNotFoundException exception) {
+        ProblemDetail problem =
+                ProblemDetail.forStatus(HttpStatus.NOT_FOUND);
+        problem.setTitle("Course not found");
+        problem.setDetail(exception.getMessage());
+        return problem;
+    }
+}</code></pre>
+      <p>Keep client-facing details safe and useful. Do not return stack traces, SQL errors, secrets, or internal class names. Handle validation failures and expected business conflicts explicitly; log unexpected server errors at an appropriate boundary without logging the same exception repeatedly at every layer.</p>
+    </section>
+
+    <section class="lesson-section" aria-labelledby="testing">
+      <h2 id="testing">8. Test controllers</h2>
+      <p>Controller tests should verify the HTTP contract: route, status, headers, request/response serialization, and validation behavior. A Spring MVC slice test can load the web layer without starting the entire application; the service can be replaced with a mock.</p>
+      <pre><code>import static org.mockito.Mockito.when;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+
+import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
+import org.springframework.test.web.servlet.MockMvc;
+
+@WebMvcTest(CourseController.class)
+class CourseControllerTest {
+    @Autowired
+    MockMvc mockMvc;
+
+    @MockitoBean
+    CourseService courseService;
+
+    @Test
+    void returnsCourseAsJson() throws Exception {
+        when(courseService.findById(42L))
+                .thenReturn(new CourseResponse(42L, "CS336B",
+                        "OOPS with Java"));
+
+        mockMvc.perform(get("/api/courses/42"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.id").value(42))
+                .andExpect(jsonPath("$.code").value("CS336B"));
+    }
+}</code></pre>
+      <p>The precise mock-bean annotation depends on the Spring Boot and Spring Framework version in the project; use the supported test-context mocking annotation for that version. Also test invalid bodies, not-found behavior, and response headers for resource creation.</p>
+    </section>
+
+    <section class="lesson-section" aria-labelledby="pitfalls">
+      <h2 id="pitfalls">9. Common controller mistakes</h2>
+      <ul>
+        <li><strong>Returning persistence entities directly:</strong> this can expose internal fields or create serialization cycles. Use API response DTOs.</li>
+        <li><strong>Putting business logic in handlers:</strong> move reusable rules and use cases into services.</li>
+        <li><strong>Using a path variable for filters:</strong> use query parameters for optional filtering and pagination.</li>
+        <li><strong>Ignoring status semantics:</strong> distinguish successful reads, creation, no-content operations, validation failures, and missing resources.</li>
+        <li><strong>Accepting unvalidated input:</strong> apply syntactic validation and enforce business invariants.</li>
+        <li><strong>Overly broad exception handling:</strong> do not convert every failure to <code>200 OK</code> or reveal internal errors to clients.</li>
+        <li><strong>Ambiguous routes:</strong> avoid overlapping mappings that depend on incidental resolution; make path, method, and media type constraints clear.</li>
+        <li><strong>Blocking request threads:</strong> keep synchronous handlers bounded and move long-running work to an asynchronous workflow where appropriate.</li>
+      </ul>
+    </section>
+
+    <section class="lesson-section" aria-labelledby="questions">
+      <h2 id="questions">Interview questions</h2>
+      <ol>
+        <li><strong>What does <code>@RestController</code> do?</strong><br>It combines controller registration with response-body semantics so handler return values are written to the HTTP response and converted.</li>
+        <li><strong>What is the difference between <code>@Controller</code> and <code>@RestController</code>?</strong><br><code>@Controller</code> commonly returns view names; <code>@RestController</code> writes return values to the response body by default.</li>
+        <li><strong>When would you use <code>ResponseEntity</code>?</strong><br>When a handler needs to control the response status, headers, and body dynamically.</li>
+        <li><strong>How does Spring convert a JSON request body into a Java object?</strong><br>It uses an HTTP message converter, commonly Jackson-backed in a standard Spring Boot JSON setup.</li>
+        <li><strong>Why use <code>@RestControllerAdvice</code>?</strong><br>It provides centralized exception-to-HTTP-response handling across REST controllers.</li>
+        <li><strong>What should a controller test verify?</strong><br>The externally visible HTTP contract: route, status, headers, serialization, validation, and error behavior.</li>
+      </ol>
+    </section>
+
+    <section class="lesson-section" aria-labelledby="quiz">
+      <h2 id="quiz">Quick check</h2>
+      <ol class="quiz">
+        <li>Which annotation indicates that a Java method parameter should be deserialized from the HTTP request body?<br><span>A. @PathVariable &nbsp; B. @RequestBody &nbsp; C. @RequestHeader &nbsp; D. @ResponseStatus</span></li>
+        <li>Which annotation combines controller registration and response-body semantics?<br><span>A. @RestController &nbsp; B. @Service &nbsp; C. @Repository &nbsp; D. @Configuration</span></li>
+        <li>Which return type is useful for dynamically setting status, headers, and body?<br><span>A. String &nbsp; B. ResponseEntity&lt;T&gt; &nbsp; C. Logger &nbsp; D. Model</span></li>
+      </ol>
+      <details class="answer-key">
+        <summary>Show answers</summary>
+        <p>1. B — <code>@RequestBody</code>. 2. A — <code>@RestController</code>. 3. B — <code>ResponseEntity&lt;T&gt;</code>.</p>
+      </details>
+    </section>
+  </main>
+</body>
+</html>

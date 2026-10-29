@@ -1,0 +1,490 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#10254b">
+  <meta name="description" content="Step-by-step tutorial for creating a Maven Spring Boot web application with Spring Initializr, Spring MVC, Thymeleaf, search, and tests.">
+  <title>Build a Web Application with Spring Boot | CS336B</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header>
+    <p class="eyebrow">Unit 5 · Spring Boot &amp; RESTful Web Services</p>
+    <h1>Build a Web Application</h1>
+    <p class="lesson-subtitle">Create a Maven Spring Boot course portal from Spring Initializr, then build, run, and test a server-rendered application.</p>
+  </header>
+
+  <main class="container lesson">
+    <nav class="nav" aria-label="Lesson navigation">
+      <a class="btn" href="delete-api.html">← Previous: DELETE API</a>
+      <a class="btn" href="unit5.html">Unit 5 Home</a>
+      <a class="btn" href="unit5.html">Finish Unit 5 →</a>
+    </nav>
+
+    <section class="lesson-section" aria-labelledby="what-build">
+      <h2 id="what-build">What you will build</h2>
+      <p>In this tutorial, you will create a small Course Portal that displays a course catalog and lets users filter courses by code, title, or description. Spring MVC handles HTTP requests, a service provides catalog data, and Thymeleaf renders HTML on the server.</p>
+      <div class="callout">
+        <strong>Technology choices:</strong> Maven project · Spring Web · Thymeleaf · Java · executable JAR. This beginner project uses in-memory sample data so you can run it without configuring a database.
+      </div>
+      <figure class="infographic">
+        <svg viewBox="0 0 960 220" role="img" aria-labelledby="mvc-flow-title mvc-flow-desc" xmlns="http://www.w3.org/2000/svg">
+          <title id="mvc-flow-title">Spring MVC web application request flow</title>
+          <desc id="mvc-flow-desc">A browser sends an HTTP request to the Spring MVC controller, which gets course data from a service and returns a Thymeleaf template rendered as HTML.</desc>
+          <rect x="12" y="22" width="936" height="174" rx="18" fill="#f3f7ff" stroke="#d7e4f6"/>
+          <g font-family="Arial, sans-serif" text-anchor="middle">
+            <rect x="35" y="70" width="155" height="70" rx="12" fill="#dcecff"/>
+            <text x="112" y="100" fill="#10254b" font-size="17" font-weight="700">Browser</text>
+            <text x="112" y="122" fill="#475569" font-size="13">HTTP GET /</text>
+            <path d="M194 105 H245" stroke="#1769e0" stroke-width="3"/><path d="M245 105 l-10 -7 v14 z" fill="#1769e0"/>
+            <rect x="253" y="70" width="155" height="70" rx="12" fill="#fff" stroke="#b8cdea"/>
+            <text x="330" y="100" fill="#10254b" font-size="17" font-weight="700">Controller</text>
+            <text x="330" y="122" fill="#475569" font-size="13">Spring MVC</text>
+            <path d="M412 105 H463" stroke="#1769e0" stroke-width="3"/><path d="M463 105 l-10 -7 v14 z" fill="#1769e0"/>
+            <rect x="471" y="70" width="155" height="70" rx="12" fill="#fff" stroke="#b8cdea"/>
+            <text x="548" y="100" fill="#10254b" font-size="17" font-weight="700">Service</text>
+            <text x="548" y="122" fill="#475569" font-size="13">Catalog data</text>
+            <path d="M630 105 H681" stroke="#1769e0" stroke-width="3"/><path d="M681 105 l-10 -7 v14 z" fill="#1769e0"/>
+            <rect x="689" y="70" width="120" height="70" rx="12" fill="#fff" stroke="#b8cdea"/>
+            <text x="749" y="100" fill="#10254b" font-size="17" font-weight="700">Thymeleaf</text>
+            <text x="749" y="122" fill="#475569" font-size="13">HTML template</text>
+            <path d="M813 105 H844" stroke="#1769e0" stroke-width="3"/><path d="M844 105 l-10 -7 v14 z" fill="#1769e0"/>
+            <rect x="852" y="70" width="77" height="70" rx="12" fill="#dff5ee"/>
+            <text x="890" y="100" fill="#145744" font-size="16" font-weight="700">HTML</text>
+            <text x="890" y="122" fill="#33695c" font-size="12">Response</text>
+            <text x="480" y="171" fill="#64748b" font-size="13">The template is rendered on the server before the response reaches the browser</text>
+          </g>
+        </svg>
+        <figcaption>Spring MVC coordinates request handling; Thymeleaf combines a template with model data to generate HTML.</figcaption>
+      </figure>
+    </section>
+
+    <section class="lesson-section" aria-labelledby="step1">
+      <h2 id="step1">Step 1: Generate a Maven project with Spring Initializr</h2>
+      <ol>
+        <li>Open <a href="https://start.spring.io/">Spring Initializr</a>.</li>
+        <li>Choose <strong>Project: Maven</strong> and <strong>Language: Java</strong>.</li>
+        <li>Select the current stable Spring Boot version offered by Initializr (avoid snapshot versions for this exercise).</li>
+        <li>Set <strong>Group</strong> to <code>com.example</code>, <strong>Artifact</strong> to <code>course-portal</code>, and <strong>Name</strong> to <code>course-portal</code>.</li>
+        <li>Choose <strong>Packaging: Jar</strong> and the Java version supported by both your installed JDK and the Spring Boot version shown by Initializr.</li>
+        <li>Add dependencies: <strong>Spring Web</strong> and <strong>Thymeleaf</strong>. Add <strong>Spring Boot DevTools</strong> only if you want development-time restart support.</li>
+        <li>Generate the project, download the ZIP, extract it, and open the extracted <code>course-portal</code> folder in your IDE.</li>
+      </ol>
+      <p>Initializr creates the Maven build file, application entry point, test structure, and Maven Wrapper scripts. Keep the generated Spring Boot version and dependency management; do not copy version numbers from an unrelated project.</p>
+    </section>
+
+    <section class="lesson-section" aria-labelledby="step2">
+      <h2 id="step2">Step 2: Inspect the generated project</h2>
+      <p>Your project will have a structure similar to this:</p>
+      <pre><code>course-portal/
+├── mvnw
+├── mvnw.cmd
+├── pom.xml
+└── src/
+    ├── main/
+    │   ├── java/com/example/courseportal/
+    │   │   └── CoursePortalApplication.java
+    │   └── resources/
+    │       ├── static/
+    │       └── templates/
+    └── test/
+        └── java/com/example/courseportal/
+            └── CoursePortalApplicationTests.java</code></pre>
+      <ul>
+        <li><code>pom.xml</code> describes dependencies and Maven build configuration.</li>
+        <li><code>src/main/java</code> contains Java application code.</li>
+        <li><code>src/main/resources/templates</code> contains Thymeleaf templates.</li>
+        <li><code>src/main/resources/static</code> contains CSS, images, and other static files.</li>
+        <li><code>src/test/java</code> contains automated tests.</li>
+        <li><code>mvnw</code> and <code>mvnw.cmd</code> run the Maven version selected for the project.</li>
+      </ul>
+    </section>
+
+    <section class="lesson-section" aria-labelledby="step3">
+      <h2 id="step3">Step 3: Confirm the application entry point</h2>
+      <p>Initializr generates a main class. It should be in the root package above the controller and service packages, so Spring’s component scan can discover them.</p>
+      <pre><code>package com.example.courseportal;
+
+import org.springframework.boot.SpringApplication;
+import org.springframework.boot.autoconfigure.SpringBootApplication;
+
+@SpringBootApplication
+public class CoursePortalApplication {
+    public static void main(String[] args) {
+        SpringApplication.run(CoursePortalApplication.class, args);
+    }
+}</code></pre>
+      <p><code>@SpringBootApplication</code> enables auto-configuration and component scanning in the application package and its subpackages.</p>
+    </section>
+
+    <section class="lesson-section" aria-labelledby="step4">
+      <h2 id="step4">Step 4: Create a course model</h2>
+      <p>Create <code>src/main/java/com/example/courseportal/course/Course.java</code>. A Java record gives this read-only sample a concise immutable data type.</p>
+      <pre><code>package com.example.courseportal.course;
+
+public record Course(
+        String code,
+        String title,
+        String description
+) {}</code></pre>
+    </section>
+
+    <section class="lesson-section" aria-labelledby="step5">
+      <h2 id="step5">Step 5: Add a service for catalog data</h2>
+      <p>Create <code>CourseCatalogService.java</code> in the same <code>course</code> package. Keeping data access and filtering out of the web controller makes each responsibility easier to maintain and test.</p>
+      <pre><code>package com.example.courseportal.course;
+
+import java.util.List;
+import java.util.Locale;
+import org.springframework.stereotype.Service;
+
+@Service
+public class CourseCatalogService {
+    private final List&lt;Course&gt; courses = List.of(
+            new Course("CS336B", "OOPS with Java",
+                    "Object-oriented programming concepts using Java."),
+            new Course("CS210", "Data Structures",
+                    "Core data structures and algorithmic thinking."),
+            new Course("CS305", "Web Technologies",
+                    "Foundations for building web applications.")
+    );
+
+    public List&lt;Course&gt; search(String query) {
+        if (query == null || query.isBlank()) {
+            return courses;
+        }
+
+        String normalized = query.trim().toLowerCase(Locale.ROOT);
+        return courses.stream()
+                .filter(course -&gt;
+                        course.code().toLowerCase(Locale.ROOT)
+                                .contains(normalized)
+                        || course.title().toLowerCase(Locale.ROOT)
+                                .contains(normalized)
+                        || course.description().toLowerCase(Locale.ROOT)
+                                .contains(normalized))
+                .toList();
+    }
+}</code></pre>
+      <p>This sample is intentionally in memory: data resets when the app restarts. A database-backed project would replace the list with a repository and add a database dependency and configuration.</p>
+    </section>
+
+    <section class="lesson-section" aria-labelledby="step6">
+      <h2 id="step6">Step 6: Create a Spring MVC controller</h2>
+      <p>Create <code>CoursePageController.java</code> in the <code>course</code> package. The controller handles the home page request, passes the search results to the model, and returns the template name.</p>
+      <pre><code>package com.example.courseportal.course;
+
+import org.springframework.stereotype.Controller;
+import org.springframework.ui.Model;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.RequestParam;
+
+@Controller
+public class CoursePageController {
+    private final CourseCatalogService catalogService;
+
+    public CoursePageController(CourseCatalogService catalogService) {
+        this.catalogService = catalogService;
+    }
+
+    @GetMapping("/")
+    public String home(
+            @RequestParam(required = false) String q,
+            Model model) {
+        model.addAttribute("courses", catalogService.search(q));
+        model.addAttribute("query", q == null ? "" : q);
+        return "courses";
+    }
+}</code></pre>
+      <p>Use <code>@Controller</code> for a page-rendering handler. Unlike <code>@RestController</code>, the returned string is a view name. The <code>Model</code> carries data to the template.</p>
+    </section>
+
+    <section class="lesson-section" aria-labelledby="step7">
+      <h2 id="step7">Step 7: Build the Thymeleaf page</h2>
+      <p>Create <code>src/main/resources/templates/courses.html</code>. Thymeleaf expressions render model values into HTML. The <code>th:text</code> attribute writes escaped text, which is safer than inserting untrusted strings as raw HTML.</p>
+      <pre><code>&lt;!doctype html&gt;
+&lt;html lang="en" xmlns:th="http://www.thymeleaf.org"&gt;
+&lt;head&gt;
+  &lt;meta charset="utf-8"&gt;
+  &lt;meta name="viewport" content="width=device-width, initial-scale=1"&gt;
+  &lt;title&gt;Course Portal&lt;/title&gt;
+  &lt;link rel="stylesheet" th:href="@{/styles.css}"&gt;
+&lt;/head&gt;
+&lt;body&gt;
+  &lt;header class="hero"&gt;
+    &lt;p class="eyebrow"&gt;KIET University · CS &amp;amp; CSE (DS)&lt;/p&gt;
+    &lt;h1&gt;Course Portal&lt;/h1&gt;
+    &lt;p&gt;Explore the course catalog.&lt;/p&gt;
+  &lt;/header&gt;
+
+  &lt;main class="content"&gt;
+    &lt;form method="get" th:action="@{/}" class="search"&gt;
+      &lt;label for="q"&gt;Search courses&lt;/label&gt;
+      &lt;div class="search-row"&gt;
+        &lt;input id="q" name="q" type="search"
+               th:value="${query}"
+               placeholder="Search by code, title, or description"&gt;
+        &lt;button type="submit"&gt;Search&lt;/button&gt;
+        &lt;a th:href="@{/}"&gt;Clear&lt;/a&gt;
+      &lt;/div&gt;
+    &lt;/form&gt;
+
+    &lt;section class="course-grid" aria-label="Courses"&gt;
+      &lt;article class="course-card" th:each="course : ${courses}"&gt;
+        &lt;p class="course-code" th:text="${course.code}"&gt;CS336B&lt;/p&gt;
+        &lt;h2 th:text="${course.title}"&gt;OOPS with Java&lt;/h2&gt;
+        &lt;p th:text="${course.description}"&gt;Course description&lt;/p&gt;
+      &lt;/article&gt;
+      &lt;p class="empty" th:if="${#lists.isEmpty(courses)}"&gt;
+        No courses match your search.
+      &lt;/p&gt;
+    &lt;/section&gt;
+  &lt;/main&gt;
+&lt;/body&gt;
+&lt;/html&gt;</code></pre>
+      <p>The form uses GET because searching does not change server state. Submitting a search produces a shareable URL such as <code>/?q=Java</code>.</p>
+    </section>
+
+    <section class="lesson-section" aria-labelledby="step8">
+      <h2 id="step8">Step 8: Add static styling</h2>
+      <p>Create <code>src/main/resources/static/styles.css</code>. Spring Boot serves files in <code>static</code> from the application root, so the template links to <code>/styles.css</code>.</p>
+      <pre><code>* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  color: #17233b;
+  background: #f3f6fb;
+  font-family: Arial, sans-serif;
+  line-height: 1.6;
+}
+
+.hero {
+  padding: 3rem max(1.25rem, calc((100% - 1000px) / 2));
+  color: white;
+  background: linear-gradient(120deg, #10254b, #1769e0);
+}
+
+.hero h1 {
+  margin: 0;
+  font-size: clamp(2rem, 5vw, 3.5rem);
+}
+
+.hero p {
+  margin: .5rem 0 0;
+}
+
+.eyebrow {
+  color: #cfe2ff;
+  font-size: .85rem;
+  font-weight: 700;
+  letter-spacing: .1em;
+  text-transform: uppercase;
+}
+
+.content {
+  width: min(1000px, calc(100% - 2rem));
+  margin: 2rem auto;
+}
+
+.search {
+  margin-bottom: 1.5rem;
+}
+
+.search label {
+  display: block;
+  margin-bottom: .5rem;
+  font-weight: 700;
+}
+
+.search-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: .6rem;
+}
+
+.search input {
+  flex: 1 1 260px;
+  min-width: 0;
+  padding: .8rem 1rem;
+  border: 1px solid #cbd5e1;
+  border-radius: 10px;
+  font: inherit;
+}
+
+.search button {
+  padding: .8rem 1.1rem;
+  border: 0;
+  border-radius: 10px;
+  color: #fff;
+  background: #1769e0;
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.search a {
+  align-self: center;
+  color: #1769e0;
+}
+
+.course-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+  gap: 1rem;
+}
+
+.course-card {
+  padding: 1.25rem;
+  border: 1px solid #e2e8f0;
+  border-radius: 14px;
+  background: white;
+  box-shadow: 0 8px 24px rgba(25, 45, 80, .06);
+}
+
+.course-card h2 {
+  margin: .25rem 0 .5rem;
+  color: #10254b;
+}
+
+.course-card p:last-child {
+  margin-bottom: 0;
+  color: #64748b;
+}
+
+.course-code {
+  margin: 0;
+  color: #1769e0;
+  font-size: .8rem;
+  font-weight: 800;
+  letter-spacing: .08em;
+}
+
+.empty {
+  color: #64748b;
+}
+
+a:focus-visible,
+button:focus-visible,
+input:focus-visible {
+  outline: 3px solid #f59e0b;
+  outline-offset: 3px;
+}</code></pre>
+    </section>
+
+    <section class="lesson-section" aria-labelledby="step9">
+      <h2 id="step9">Step 9: Run the application with Maven</h2>
+      <p>Open a terminal in the project root (the directory containing <code>pom.xml</code>) and use the Maven Wrapper:</p>
+      <pre><code># macOS / Linux
+./mvnw spring-boot:run
+
+# Windows Command Prompt
+mvnw.cmd spring-boot:run</code></pre>
+      <p>Open <code>http://localhost:8080/</code> in a browser. Try searching for <code>Java</code>, <code>CS336B</code>, and a term with no match. Stop the application with <kbd>Ctrl</kbd>+<kbd>C</kbd>.</p>
+      <p>The wrapper uses the Maven version configured by the project. If the wrapper script is not executable on macOS/Linux, run <code>chmod +x mvnw</code> once, then retry.</p>
+    </section>
+
+    <section class="lesson-section" aria-labelledby="step10">
+      <h2 id="step10">Step 10: Add a web-layer test</h2>
+      <p>Initializr commonly adds Spring Boot Starter Test. If it is missing, add this dependency inside the Maven <code>&lt;dependencies&gt;</code> section of <code>pom.xml</code>; Spring Boot’s dependency management supplies its version.</p>
+      <pre><code>&lt;dependency&gt;
+    &lt;groupId&gt;org.springframework.boot&lt;/groupId&gt;
+    &lt;artifactId&gt;spring-boot-starter-test&lt;/artifactId&gt;
+    &lt;scope&gt;test&lt;/scope&gt;
+&lt;/dependency&gt;</code></pre>
+      <p>Create a test under <code>src/test/java/com/example/courseportal/course/CoursePageControllerTest.java</code>. This integration-style test starts the application context and checks the rendered page.</p>
+      <pre><code>package com.example.courseportal.course;
+
+import static org.hamcrest.Matchers.containsString;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+
+import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
+import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.test.web.servlet.MockMvc;
+
+@SpringBootTest
+@AutoConfigureMockMvc
+class CoursePageControllerTest {
+    @Autowired
+    MockMvc mockMvc;
+
+    @Test
+    void homePageShowsCourseCatalog() throws Exception {
+        mockMvc.perform(get("/"))
+                .andExpect(status().isOk())
+                .andExpect(content().string(
+                        containsString("Course Portal")))
+                .andExpect(content().string(
+                        containsString("CS336B")));
+    }
+
+    @Test
+    void searchFiltersCourses() throws Exception {
+        mockMvc.perform(get("/").param("q", "Java"))
+                .andExpect(status().isOk())
+                .andExpect(content().string(
+                        containsString("OOPS with Java")))
+                .andExpect(content().string(
+                        org.hamcrest.Matchers.not(
+                                containsString("Data Structures"))));
+    }
+}</code></pre>
+      <p>Run the test suite with:</p>
+      <pre><code>./mvnw test</code></pre>
+    </section>
+
+    <section class="lesson-section" aria-labelledby="step11">
+      <h2 id="step11">Step 11: Package and run the executable JAR</h2>
+      <p>Build a production artifact from the project root:</p>
+      <pre><code>./mvnw clean package
+java -jar target/course-portal-0.0.1-SNAPSHOT.jar</code></pre>
+      <p>The artifact version in the filename comes from the generated <code>pom.xml</code>; check that file and adjust the command if you changed the version. An executable Spring Boot JAR includes the application and its runtime dependencies.</p>
+    </section>
+
+    <section class="lesson-section" aria-labelledby="troubleshooting">
+      <h2 id="troubleshooting">Troubleshooting checklist</h2>
+      <ul>
+        <li><strong>Whitelabel error or 404:</strong> confirm the controller is under the main application package and the route is <code>/</code>.</li>
+        <li><strong>Template not found:</strong> put <code>courses.html</code> under <code>src/main/resources/templates</code> and return <code>"courses"</code> from the controller.</li>
+        <li><strong>CSS is missing:</strong> put <code>styles.css</code> under <code>src/main/resources/static</code> and link using <code>@{/styles.css}</code>.</li>
+        <li><strong>Port already in use:</strong> stop the other process or set <code>server.port</code> in <code>application.properties</code>.</li>
+        <li><strong>Maven cannot resolve dependencies:</strong> check network access and inspect the first Maven error; do not suppress dependency failures.</li>
+        <li><strong>Java version error:</strong> use a JDK version supported by the selected Spring Boot release and the project’s Maven configuration.</li>
+      </ul>
+    </section>
+
+    <section class="lesson-section" aria-labelledby="next">
+      <h2 id="next">Next steps for a real project</h2>
+      <p>This catalog is intentionally read-only and uses in-memory data. To evolve it:</p>
+      <ol>
+        <li>Add a database driver and Spring Data JPA dependency using Spring Initializr.</li>
+        <li>Create a JPA entity and repository, then replace the sample list in the service.</li>
+        <li>Add migrations with Flyway or Liquibase rather than relying on automatic production schema creation.</li>
+        <li>Add form submission and Bean Validation for creating or editing courses.</li>
+        <li>Add authentication, authorization, CSRF protection for browser forms, and secure configuration as needed.</li>
+        <li>Use REST controllers as a separate API contract when other clients need JSON; Thymeleaf pages and REST endpoints can coexist.</li>
+      </ol>
+    </section>
+
+    <section class="lesson-section" aria-labelledby="quiz">
+      <h2 id="quiz">Quick check</h2>
+      <ol class="quiz">
+        <li>Which Spring Initializr project type is used in this tutorial?<br><span>A. Gradle &nbsp; B. Maven &nbsp; C. Ant &nbsp; D. Bazel</span></li>
+        <li>Where do Thymeleaf HTML templates go by convention?<br><span>A. src/main/java &nbsp; B. src/main/resources/templates &nbsp; C. src/test/java &nbsp; D. target/classes only</span></li>
+        <li>What does a Spring MVC <code>@Controller</code> return in this example?<br><span>A. A view name for Thymeleaf &nbsp; B. A database connection &nbsp; C. A Maven task &nbsp; D. A CSS selector</span></li>
+        <li>Which command runs the application with the generated Maven Wrapper?<br><span>A. ./mvnw spring-boot:run &nbsp; B. java CoursePortalApplication.html &nbsp; C. npm start &nbsp; D. ./mvnw delete</span></li>
+      </ol>
+      <details class="answer-key">
+        <summary>Show answers</summary>
+        <p>1. B — Maven. 2. B — <code>src/main/resources/templates</code>. 3. A — the template view name. 4. A — <code>./mvnw spring-boot:run</code>.</p>
+      </details>
+    </section>
+  </main>
+</body>
+</html>

@@ -1,0 +1,333 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#10254b">
+  <meta name="description" content="Step-by-step tutorial for creating a Spring Boot DELETE API with a repository, service, controller, authorization, status codes, and tests.">
+  <title>DELETE API in Spring Boot | CS336B</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header>
+    <p class="eyebrow">Unit 5 · Spring Boot &amp; RESTful Web Services</p>
+    <h1>Building a DELETE API</h1>
+    <p class="lesson-subtitle">A step-by-step Spring Boot tutorial for safely deleting a resource by ID.</p>
+  </header>
+
+  <main class="container lesson">
+    <nav class="nav" aria-label="Lesson navigation">
+      <a class="btn" href="put-api.html">← Previous: PUT API</a>
+      <a class="btn" href="unit5.html">Unit 5 Home</a>
+      <a class="btn" href="web-applications.html">Next: Build Web Applications →</a>
+    </nav>
+
+    <section class="lesson-section" aria-labelledby="outcomes">
+      <h2 id="outcomes">What you will build</h2>
+      <p>We will implement <code>DELETE /api/courses/{id}</code> using a Spring MVC controller, service, and Spring Data repository. The tutorial uses an update-only deletion policy: the first successful deletion returns <code>204 No Content</code>; an unknown ID returns <code>404 Not Found</code>.</p>
+      <div class="callout">
+        <strong>DELETE is idempotent in intended effect.</strong> Repeating a delete does not further change the resource state. The API may still return <code>404</code> on a repeated request after the resource is gone; idempotency does not require identical response codes.
+      </div>
+    </section>
+
+    <section class="lesson-section" aria-labelledby="flow">
+      <h2 id="flow">How the request flows</h2>
+      <figure class="infographic">
+        <svg viewBox="0 0 960 220" role="img" aria-labelledby="delete-flow-title delete-flow-desc" xmlns="http://www.w3.org/2000/svg">
+          <title id="delete-flow-title">DELETE API processing flow</title>
+          <desc id="delete-flow-desc">A client sends DELETE with a resource ID. The controller delegates to a service, the service checks and deletes through the repository, and the server returns no content or not found.</desc>
+          <rect x="12" y="22" width="936" height="174" rx="18" fill="#f3f7ff" stroke="#d7e4f6"/>
+          <g font-family="Arial, sans-serif" text-anchor="middle">
+            <rect x="34" y="70" width="165" height="70" rx="12" fill="#dcecff"/>
+            <text x="116" y="100" fill="#10254b" font-size="17" font-weight="700">Client</text>
+            <text x="116" y="122" fill="#475569" font-size="13">DELETE /courses/42</text>
+            <path d="M203 105 H260" stroke="#1769e0" stroke-width="3"/><path d="M260 105 l-10 -7 v14 z" fill="#1769e0"/>
+            <rect x="268" y="70" width="165" height="70" rx="12" fill="#fff" stroke="#b8cdea"/>
+            <text x="350" y="100" fill="#10254b" font-size="17" font-weight="700">Controller</text>
+            <text x="350" y="122" fill="#475569" font-size="13">@DeleteMapping</text>
+            <path d="M437 105 H494" stroke="#1769e0" stroke-width="3"/><path d="M494 105 l-10 -7 v14 z" fill="#1769e0"/>
+            <rect x="502" y="70" width="165" height="70" rx="12" fill="#fff" stroke="#b8cdea"/>
+            <text x="584" y="100" fill="#10254b" font-size="17" font-weight="700">Service</text>
+            <text x="584" y="122" fill="#475569" font-size="13">Authorize + delete</text>
+            <path d="M671 105 H728" stroke="#1769e0" stroke-width="3"/><path d="M728 105 l-10 -7 v14 z" fill="#1769e0"/>
+            <rect x="736" y="70" width="190" height="70" rx="12" fill="#dff5ee"/>
+            <text x="831" y="99" fill="#145744" font-size="17" font-weight="700">Repository</text>
+            <text x="831" y="122" fill="#33695c" font-size="13">Delete or not found</text>
+            <text x="480" y="173" fill="#64748b" font-size="13">Response: 204 No Content or a documented client error</text>
+          </g>
+        </svg>
+        <figcaption>Keep request handling in the controller, deletion rules in the service, and persistence operations in the repository.</figcaption>
+      </figure>
+    </section>
+
+    <section class="lesson-section" aria-labelledby="step1">
+      <h2 id="step1">Step 1: Add the required project dependencies</h2>
+      <p>In Spring Initializr, select Spring Web and Spring Data JPA, then select the driver for the database used by your project. For Maven, the main dependencies look like this (the database driver is database-specific):</p>
+      <pre><code>&lt;dependency&gt;
+    &lt;groupId&gt;org.springframework.boot&lt;/groupId&gt;
+    &lt;artifactId&gt;spring-boot-starter-web&lt;/artifactId&gt;
+&lt;/dependency&gt;
+&lt;dependency&gt;
+    &lt;groupId&gt;org.springframework.boot&lt;/groupId&gt;
+    &lt;artifactId&gt;spring-boot-starter-data-jpa&lt;/artifactId&gt;
+&lt;/dependency&gt;</code></pre>
+      <p>A typical package layout:</p>
+      <pre><code>src/main/java/com/example/course/
+├── controller/CourseController.java
+├── entity/Course.java
+├── exception/CourseNotFoundException.java
+├── repository/CourseRepository.java
+└── service/CourseService.java</code></pre>
+    </section>
+
+    <section class="lesson-section" aria-labelledby="step2">
+      <h2 id="step2">Step 2: Create the entity</h2>
+      <p>This JPA entity represents a row in the <code>courses</code> table. The example uses a generated ID and a no-argument constructor required by JPA.</p>
+      <pre><code>package com.example.course.entity;
+
+import jakarta.persistence.Entity;
+import jakarta.persistence.GeneratedValue;
+import jakarta.persistence.GenerationType;
+import jakarta.persistence.Id;
+import jakarta.persistence.Table;
+
+@Entity
+@Table(name = "courses")
+public class Course {
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    private Long id;
+
+    private String code;
+    private String title;
+
+    protected Course() {
+    }
+
+    public Long getId() {
+        return id;
+    }
+}</code></pre>
+      <p>Real applications should also define database constraints, relationships, and schema migrations according to their domain. The DELETE API only needs the ID and repository for this example.</p>
+    </section>
+
+    <section class="lesson-section" aria-labelledby="step3">
+      <h2 id="step3">Step 3: Define a repository</h2>
+      <p>Spring Data JPA provides <code>findById</code> and <code>delete</code> from <code>JpaRepository</code>, so no custom SQL is needed for this basic operation.</p>
+      <pre><code>package com.example.course.repository;
+
+import com.example.course.entity.Course;
+import org.springframework.data.jpa.repository.JpaRepository;
+
+public interface CourseRepository extends JpaRepository&lt;Course, Long&gt; {
+}</code></pre>
+      <p>Spring creates the repository implementation at runtime. The ID type in <code>JpaRepository&lt;Course, Long&gt;</code> should match the entity’s <code>@Id</code> type.</p>
+    </section>
+
+    <section class="lesson-section" aria-labelledby="step4">
+      <h2 id="step4">Step 4: Define a not-found exception</h2>
+      <p>Represent the expected “resource does not exist” condition explicitly so it can be translated to HTTP <code>404</code>.</p>
+      <pre><code>package com.example.course.exception;
+
+public class CourseNotFoundException extends RuntimeException {
+    public CourseNotFoundException(long id) {
+        super("Course " + id + " was not found");
+    }
+}</code></pre>
+    </section>
+
+    <section class="lesson-section" aria-labelledby="step5">
+      <h2 id="step5">Step 5: Implement deletion in the service</h2>
+      <p>The service verifies that the course exists and deletes it within a transaction. The existence check allows the API to distinguish a missing resource from a successful deletion.</p>
+      <pre><code>package com.example.course.service;
+
+import com.example.course.entity.Course;
+import com.example.course.exception.CourseNotFoundException;
+import com.example.course.repository.CourseRepository;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
+@Service
+public class CourseService {
+    private final CourseRepository repository;
+
+    public CourseService(CourseRepository repository) {
+        this.repository = repository;
+    }
+
+    @Transactional
+    public void delete(long id) {
+        Course course = repository.findById(id)
+                .orElseThrow(() -&gt; new CourseNotFoundException(id));
+        repository.delete(course);
+    }
+}</code></pre>
+      <p>In concurrent systems, the resource could change between lookup and delete. The database operation and transaction remain authoritative. If concurrent deletion is common, decide whether a second delete should be treated as not found or as a successful no-op and implement that policy consistently.</p>
+    </section>
+
+    <section class="lesson-section" aria-labelledby="step6">
+      <h2 id="step6">Step 6: Expose the DELETE endpoint</h2>
+      <p>Use <code>@DeleteMapping</code> and a <code>@PathVariable</code> to identify the resource. Return <code>204 No Content</code> after successful deletion; a 204 response must not include a response body.</p>
+      <pre><code>package com.example.course.controller;
+
+import com.example.course.service.CourseService;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.DeleteMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RestController;
+
+@RestController
+@RequestMapping("/api/courses")
+public class CourseController {
+    private final CourseService courseService;
+
+    public CourseController(CourseService courseService) {
+        this.courseService = courseService;
+    }
+
+    @DeleteMapping("/{id}")
+    public ResponseEntity&lt;Void&gt; deleteCourse(
+            @PathVariable long id) {
+        courseService.delete(id);
+        return ResponseEntity.noContent().build();
+    }
+}</code></pre>
+      <p>The composed route is <code>DELETE /api/courses/{id}</code>. Keep the controller thin: it delegates the operation and communicates the HTTP response.</p>
+    </section>
+
+    <section class="lesson-section" aria-labelledby="step7">
+      <h2 id="step7">Step 7: Map missing resources to HTTP 404</h2>
+      <p>Use a shared <code>@RestControllerAdvice</code> to translate the service exception into a consistent client response. This avoids returning internal exception details.</p>
+      <pre><code>import com.example.course.exception.CourseNotFoundException;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ProblemDetail;
+import org.springframework.web.bind.annotation.ExceptionHandler;
+import org.springframework.web.bind.annotation.RestControllerAdvice;
+
+@RestControllerAdvice
+public class ApiExceptionHandler {
+    @ExceptionHandler(CourseNotFoundException.class)
+    ProblemDetail handleCourseNotFound(
+            CourseNotFoundException exception) {
+        ProblemDetail problem =
+                ProblemDetail.forStatus(HttpStatus.NOT_FOUND);
+        problem.setTitle("Course not found");
+        problem.setDetail("The requested course does not exist.");
+        return problem;
+    }
+}</code></pre>
+      <p><code>ProblemDetail</code> is available in modern Spring Framework versions. If using an older version, return your API’s documented error DTO instead.</p>
+    </section>
+
+    <section class="lesson-section" aria-labelledby="step8">
+      <h2 id="step8">Step 8: Run and call the API</h2>
+      <p>Start your application with its configured database available, then call the endpoint with a course ID that exists:</p>
+      <pre><code>./mvnw spring-boot:run
+
+curl -i -X DELETE http://localhost:8080/api/courses/42</code></pre>
+      <p>Expected success response:</p>
+      <pre><code>HTTP/1.1 204
+
+(no response body)</code></pre>
+      <p>For an unknown ID, the update-only sample returns <code>404 Not Found</code>. On Windows, use <code>mvnw.cmd spring-boot:run</code>.</p>
+    </section>
+
+    <section class="lesson-section" aria-labelledby="step9">
+      <h2 id="step9">Step 9: Test success and not-found cases</h2>
+      <p>Test both the HTTP contract and service behavior. A controller test can mock the service and verify the status; service tests should check repository interactions and missing-resource behavior.</p>
+      <pre><code>import static org.mockito.Mockito.doThrow;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+
+import com.example.course.exception.CourseNotFoundException;
+import com.example.course.service.CourseService;
+import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
+import org.springframework.test.web.servlet.MockMvc;
+
+@WebMvcTest(CourseController.class)
+class CourseControllerTest {
+    @Autowired
+    MockMvc mockMvc;
+
+    @MockitoBean
+    CourseService courseService;
+
+    @Test
+    void deletesExistingCourse() throws Exception {
+        mockMvc.perform(delete("/api/courses/42"))
+                .andExpect(status().isNoContent());
+    }
+
+    @Test
+    void returnsNotFoundWhenCourseDoesNotExist() throws Exception {
+        doThrow(new CourseNotFoundException(999L))
+                .when(courseService).delete(999L);
+
+        mockMvc.perform(delete("/api/courses/999"))
+                .andExpect(status().isNotFound());
+    }
+}</code></pre>
+      <p>Also test authorization failures, invalid identifier conversion, database constraints, and any soft-delete policy. Keep assertions focused on your API’s documented responses rather than internal exception text.</p>
+      <p><code>@MockitoBean</code> is available in recent Spring Framework versions. For older project versions, use the test-context mock annotation supported by that version.</p>
+    </section>
+
+    <section class="lesson-section" aria-labelledby="policies">
+      <h2 id="policies">Deletion policy choices</h2>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Policy</th><th>Behavior</th><th>Considerations</th></tr></thead>
+          <tbody>
+            <tr><td>Hard delete</td><td>Remove the row from the database.</td><td>Check foreign-key references, audit requirements, and retention obligations.</td></tr>
+            <tr><td>Soft delete</td><td>Mark a resource inactive/deleted instead of physically removing it.</td><td>All reads must consistently exclude deleted records; define restore and retention behavior.</td></tr>
+            <tr><td>Idempotent no-op for missing ID</td><td>Repeated deletion returns success even if already absent.</td><td>Can simplify retries, but may hide invalid IDs or require careful authorization.</td></tr>
+            <tr><td>Not-found for missing ID</td><td>Return <code>404</code> when no current resource exists.</td><td>Clear resource-existence feedback; repeated delete can return 404 while remaining idempotent in effect.</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p>Choose the policy based on domain, audit, privacy, and client requirements. If using a database foreign key, handle dependent records intentionally rather than bypassing referential integrity.</p>
+    </section>
+
+    <section class="lesson-section" aria-labelledby="security">
+      <h2 id="security">Security and reliability checklist</h2>
+      <ul>
+        <li><strong>Authorize the specific resource:</strong> authentication alone is not permission to delete every record.</li>
+        <li><strong>Protect against IDOR:</strong> scope lookups to the caller’s tenant or ownership context where applicable.</li>
+        <li><strong>Consider CSRF:</strong> browser applications using cookie-based authentication need appropriate CSRF protection for state-changing requests.</li>
+        <li><strong>Audit destructive actions:</strong> record who deleted what and when, without logging secrets or unnecessary personal data.</li>
+        <li><strong>Review relationships:</strong> decide how dependent records, foreign keys, and storage objects are handled.</li>
+        <li><strong>Use HTTPS:</strong> protect credentials and requests in transit.</li>
+        <li><strong>Confirm intent for high-impact actions:</strong> use application-level confirmation or approval where the domain requires it; do not rely on obscurity.</li>
+      </ul>
+    </section>
+
+    <section class="lesson-section" aria-labelledby="questions">
+      <h2 id="questions">Interview questions</h2>
+      <ol>
+        <li><strong>Which HTTP status is commonly returned when deletion succeeds without a body?</strong><br><code>204 No Content</code>.</li>
+        <li><strong>Is DELETE idempotent?</strong><br>Yes in intended effect: repeating it does not further change the resource state, though the response code may differ.</li>
+        <li><strong>Should a repeated delete return 204 or 404?</strong><br>Either can be chosen as an API policy; document and apply it consistently.</li>
+        <li><strong>Why check existence before deletion?</strong><br>To implement an update-only contract that reports a missing resource as <code>404</code>.</li>
+        <li><strong>What is a soft delete?</strong><br>Marking a record as deleted or inactive while retaining it for audit, recovery, or retention purposes.</li>
+        <li><strong>Why is authorization especially important for DELETE?</strong><br>It is destructive; the caller must be allowed to delete the specific resource, not merely be authenticated.</li>
+      </ol>
+    </section>
+
+    <section class="lesson-section" aria-labelledby="quiz">
+      <h2 id="quiz">Quick check</h2>
+      <ol class="quiz">
+        <li>Which annotation maps an HTTP DELETE request in Spring MVC?<br><span>A. @GetMapping &nbsp; B. @DeleteMapping &nbsp; C. @RequestBody &nbsp; D. @PutMapping</span></li>
+        <li>Which status is commonly used for successful deletion with no response body?<br><span>A. 200 &nbsp; B. 201 &nbsp; C. 204 &nbsp; D. 404</span></li>
+        <li>Does idempotency require the same response status for every repeated DELETE request?<br><span>A. Yes &nbsp; B. No, it concerns the intended effect on resource state &nbsp; C. Only when using JPA &nbsp; D. Only for soft deletes</span></li>
+      </ol>
+      <details class="answer-key">
+        <summary>Show answers</summary>
+        <p>1. B — <code>@DeleteMapping</code>. 2. C — <code>204 No Content</code>. 3. B — idempotency concerns intended state, not identical responses.</p>
+      </details>
+    </section>
+  </main>
+</body>
+</html>

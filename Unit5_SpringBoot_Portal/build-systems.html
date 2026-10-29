@@ -1,0 +1,236 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#10254b">
+  <meta name="description" content="Learn how Maven and Gradle build Spring Boot applications, manage dependencies, run tests, and package executable archives.">
+  <title>Spring Boot Build Systems | CS336B</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header>
+    <p class="eyebrow">Unit 5 · Spring Boot &amp; RESTful Web Services</p>
+    <h1>Spring Boot Build Systems</h1>
+    <p class="lesson-subtitle">Understand how Maven and Gradle compile, test, and package Java applications.</p>
+  </header>
+
+  <main class="container lesson">
+    <nav class="nav" aria-label="Lesson navigation">
+      <a class="btn" href="unit5.html">← Unit 5 Home</a>
+      <a class="btn" href="code-structure.html">Next: Code Structure →</a>
+    </nav>
+
+    <section class="lesson-section" aria-labelledby="overview">
+      <h2 id="overview">What is a build system?</h2>
+      <p>A Java build system automates the repeatable steps that turn source code into a runnable or deployable application. It resolves libraries, compiles code, runs tests, copies resources, and creates artifacts such as JAR or WAR files.</p>
+      <p>Spring Boot projects commonly use <strong>Apache Maven</strong> or <strong>Gradle</strong>. Spring Boot works with either; the build tool is responsible for executing the build, while Spring Boot provides conventions, dependency management, plugins, and packaging support.</p>
+      <div class="callout">
+        <strong>By the end of this lesson, you should be able to:</strong>
+        <ul>
+          <li>Describe the main stages of a Java build.</li>
+          <li>Explain dependencies, starters, and dependency management.</li>
+          <li>Read a basic Maven <code>pom.xml</code> and Gradle <code>build.gradle</code>.</li>
+          <li>Use the project wrapper to test and package a Spring Boot application.</li>
+        </ul>
+      </div>
+    </section>
+
+    <section class="lesson-section" aria-labelledby="build-work">
+      <h2 id="build-work">What happens during a build?</h2>
+      <ol>
+        <li><strong>Resolve dependencies:</strong> obtain required libraries and plugins from configured repositories and cache them locally.</li>
+        <li><strong>Compile:</strong> compile production Java sources, typically from <code>src/main/java</code>.</li>
+        <li><strong>Process resources:</strong> copy configuration and other resources from <code>src/main/resources</code>.</li>
+        <li><strong>Test:</strong> compile and run tests from <code>src/test/java</code>.</li>
+        <li><strong>Package:</strong> assemble compiled classes and resources into a JAR or WAR.</li>
+        <li><strong>Verify and publish:</strong> run configured checks and, when needed, publish the artifact to a repository.</li>
+      </ol>
+      <p>A typical Java project follows this layout:</p>
+      <pre><code>my-app/
+├── src/
+│   ├── main/
+│   │   ├── java/          # Application source
+│   │   └── resources/     # Configuration and static resources
+│   └── test/
+│       ├── java/          # Automated tests
+│       └── resources/     # Test-only resources
+├── pom.xml                # Maven build definition
+└── mvnw / mvnw.cmd        # Maven Wrapper (if enabled)</code></pre>
+    </section>
+
+    <section class="lesson-section" aria-labelledby="maven">
+      <h2 id="maven">Apache Maven</h2>
+      <p>Maven describes a project in an XML file named <code>pom.xml</code> (Project Object Model). It uses a conventional directory layout and a lifecycle made up of ordered phases. Invoking a later phase also runs the earlier phases in that lifecycle.</p>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Phase</th><th>Purpose</th></tr></thead>
+          <tbody>
+            <tr><td><code>validate</code></td><td>Check that the project structure and required information are valid.</td></tr>
+            <tr><td><code>compile</code></td><td>Compile the main application source.</td></tr>
+            <tr><td><code>test</code></td><td>Run unit tests.</td></tr>
+            <tr><td><code>package</code></td><td>Create a JAR or WAR from the compiled application.</td></tr>
+            <tr><td><code>verify</code></td><td>Run additional checks on the packaged result.</td></tr>
+            <tr><td><code>install</code></td><td>Place the artifact in the local Maven repository for other local projects.</td></tr>
+            <tr><td><code>deploy</code></td><td>Publish the artifact to a configured remote repository.</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <h3>Example: Spring Boot Maven project</h3>
+      <p>This example uses the Spring Boot parent for managed dependency and plugin defaults. Choose a Spring Boot release compatible with your project and Java version.</p>
+      <pre><code>&lt;?xml version="1.0" encoding="UTF-8"?&gt;
+&lt;project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0
+         https://maven.apache.org/xsd/maven-4.0.0.xsd"&gt;
+  &lt;modelVersion&gt;4.0.0&lt;/modelVersion&gt;
+
+  &lt;parent&gt;
+    &lt;groupId&gt;org.springframework.boot&lt;/groupId&gt;
+    &lt;artifactId&gt;spring-boot-starter-parent&lt;/artifactId&gt;
+    &lt;version&gt;3.4.0&lt;/version&gt;
+    &lt;relativePath/&gt;
+  &lt;/parent&gt;
+
+  &lt;groupId&gt;com.example&lt;/groupId&gt;
+  &lt;artifactId&gt;course-api&lt;/artifactId&gt;
+  &lt;version&gt;0.0.1-SNAPSHOT&lt;/version&gt;
+  &lt;name&gt;course-api&lt;/name&gt;
+
+  &lt;properties&gt;
+    &lt;java.version&gt;17&lt;/java.version&gt;
+  &lt;/properties&gt;
+
+  &lt;dependencies&gt;
+    &lt;dependency&gt;
+      &lt;groupId&gt;org.springframework.boot&lt;/groupId&gt;
+      &lt;artifactId&gt;spring-boot-starter-web&lt;/artifactId&gt;
+    &lt;/dependency&gt;
+    &lt;dependency&gt;
+      &lt;groupId&gt;org.springframework.boot&lt;/groupId&gt;
+      &lt;artifactId&gt;spring-boot-starter-test&lt;/artifactId&gt;
+      &lt;scope&gt;test&lt;/scope&gt;
+    &lt;/dependency&gt;
+  &lt;/dependencies&gt;
+
+  &lt;build&gt;
+    &lt;plugins&gt;
+      &lt;plugin&gt;
+        &lt;groupId&gt;org.springframework.boot&lt;/groupId&gt;
+        &lt;artifactId&gt;spring-boot-maven-plugin&lt;/artifactId&gt;
+      &lt;/plugin&gt;
+    &lt;/plugins&gt;
+  &lt;/build&gt;
+&lt;/project&gt;</code></pre>
+      <p><code>spring-boot-starter-web</code> is a starter: a convenient dependency set for common web application needs. The Spring Boot parent manages compatible versions, so the example does not specify a version on each dependency. The test starter is restricted to the test scope and is not included as a production dependency.</p>
+    </section>
+
+    <section class="lesson-section" aria-labelledby="gradle">
+      <h2 id="gradle">Gradle</h2>
+      <p>Gradle defines builds using a Groovy or Kotlin DSL. A project may use <code>build.gradle</code> (Groovy) or <code>build.gradle.kts</code> (Kotlin). Gradle tasks can be composed and customized, and the Gradle Wrapper provides a consistent Gradle version for the project.</p>
+      <h3>Example: Gradle with the Groovy DSL</h3>
+      <pre><code>plugins {
+    id 'java'
+    id 'org.springframework.boot' version '3.4.0'
+    id 'io.spring.dependency-management' version '1.1.6'
+}
+
+group = 'com.example'
+version = '0.0.1-SNAPSHOT'
+
+java {
+    toolchain {
+        languageVersion = JavaLanguageVersion.of(17)
+    }
+}
+
+dependencies {
+    implementation 'org.springframework.boot:spring-boot-starter-web'
+    testImplementation 'org.springframework.boot:spring-boot-starter-test'
+}
+
+tasks.named('test') {
+    useJUnitPlatform()
+}</code></pre>
+      <p>The <code>implementation</code> configuration declares an application dependency. <code>testImplementation</code> makes a dependency available to test code. The Spring Boot Gradle plugin supports tasks such as <code>bootRun</code> and <code>bootJar</code>.</p>
+    </section>
+
+    <section class="lesson-section" aria-labelledby="compare">
+      <h2 id="compare">Maven and Gradle at a glance</h2>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Aspect</th><th>Maven</th><th>Gradle</th></tr></thead>
+          <tbody>
+            <tr><td>Build definition</td><td>XML in <code>pom.xml</code></td><td>Groovy or Kotlin DSL</td></tr>
+            <tr><td>Build model</td><td>Convention-based lifecycle and goals</td><td>Task graph with configurable tasks</td></tr>
+            <tr><td>Common commands</td><td><code>mvn test</code>, <code>mvn package</code></td><td><code>./gradlew test</code>, <code>./gradlew build</code></td></tr>
+            <tr><td>Wrapper</td><td><code>mvnw</code> / <code>mvnw.cmd</code></td><td><code>gradlew</code> / <code>gradlew.bat</code></td></tr>
+            <tr><td>Best fit</td><td>Projects favoring explicit conventions and a familiar lifecycle</td><td>Projects needing a flexible, programmable build</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p>Neither tool is universally better. Follow the build tool already used by the project unless there is a clear reason to migrate.</p>
+    </section>
+
+    <section class="lesson-section" aria-labelledby="commands">
+      <h2 id="commands">Everyday build commands</h2>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Task</th><th>Maven</th><th>Gradle Wrapper</th></tr></thead>
+          <tbody>
+            <tr><td>Run the application</td><td><code>./mvnw spring-boot:run</code></td><td><code>./gradlew bootRun</code></td></tr>
+            <tr><td>Run tests</td><td><code>./mvnw test</code></td><td><code>./gradlew test</code></td></tr>
+            <tr><td>Build/package</td><td><code>./mvnw clean package</code></td><td><code>./gradlew clean build</code></td></tr>
+            <tr><td>Skip tests (use sparingly)</td><td><code>./mvnw package -DskipTests</code></td><td><code>./gradlew build -x test</code></td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p>On Windows, use <code>mvnw.cmd</code> or <code>gradlew.bat</code>. The wrapper scripts download and invoke the project-selected build-tool version, reducing “works on my machine” differences. Prefer the wrapper over a globally installed tool for team and CI builds.</p>
+    </section>
+
+    <section class="lesson-section" aria-labelledby="packaging">
+      <h2 id="packaging">Executable Spring Boot archives</h2>
+      <p>The Spring Boot Maven or Gradle plugin can package an executable JAR containing the application and its runtime dependencies. After a successful package/build, run it with Java:</p>
+      <pre><code>java -jar target/course-api-0.0.1-SNAPSHOT.jar</code></pre>
+      <p>Maven normally writes packaged artifacts to <code>target/</code>; Gradle writes them to <code>build/libs/</code>. A Spring Boot executable JAR can be launched with <code>java -jar</code>; it is different from a plain library JAR that expects dependencies on an external classpath.</p>
+    </section>
+
+    <section class="lesson-section" aria-labelledby="troubleshooting">
+      <h2 id="troubleshooting">Common build problems</h2>
+      <ul>
+        <li><strong>Wrong Java version:</strong> check the project’s Java setting and the installed JDK. Maven and Gradle toolchains can help select a consistent compiler.</li>
+        <li><strong>Dependency resolution fails:</strong> check the artifact coordinates, repository availability, network access, and any proxy configuration.</li>
+        <li><strong>Conflicting dependency versions:</strong> let the Spring Boot dependency management choose compatible versions unless an override is intentional and tested.</li>
+        <li><strong>Tests are not discovered:</strong> verify test naming, test framework dependencies, and test task configuration.</li>
+        <li><strong>Application starts locally but not from the JAR:</strong> build the executable archive with the Spring Boot plugin and launch the generated artifact.</li>
+        <li><strong>Build works only on one computer:</strong> use the project wrapper and commit its wrapper configuration and scripts.</li>
+      </ul>
+    </section>
+
+    <section class="lesson-section" aria-labelledby="questions">
+      <h2 id="questions">Interview questions</h2>
+      <ol>
+        <li><strong>What does a build system do?</strong><br>It automates dependency resolution, compilation, testing, packaging, and other repeatable project tasks.</li>
+        <li><strong>What is a Spring Boot starter?</strong><br>A curated dependency descriptor that brings in a useful set of related libraries for a feature, such as web development.</li>
+        <li><strong>Why use the Maven or Gradle Wrapper?</strong><br>It runs the build with the version selected by the project, without requiring each developer or CI machine to install that version globally.</li>
+        <li><strong>What is the difference between <code>package</code> and <code>install</code> in Maven?</strong><br><code>package</code> creates the artifact; <code>install</code> also places it in the local Maven repository.</li>
+        <li><strong>What does dependency management provide?</strong><br>It centralizes or constrains dependency versions so compatible libraries can be used consistently.</li>
+      </ol>
+    </section>
+
+    <section class="lesson-section" aria-labelledby="quiz">
+      <h2 id="quiz">Quick check</h2>
+      <ol class="quiz">
+        <li>Which Maven phase creates the project archive?<br><span>A. validate &nbsp; B. compile &nbsp; C. package &nbsp; D. install</span></li>
+        <li>Which Gradle configuration is commonly used for a dependency needed only by tests?<br><span>A. implementation &nbsp; B. testImplementation &nbsp; C. runtimeOnly &nbsp; D. compileOnly</span></li>
+        <li>Which command runs a packaged executable Spring Boot JAR?<br><span>A. java -jar app.jar &nbsp; B. javac app.jar &nbsp; C. mvn app.jar &nbsp; D. spring package</span></li>
+      </ol>
+      <details class="answer-key">
+        <summary>Show answers</summary>
+        <p>1. C — <code>package</code>. 2. B — <code>testImplementation</code>. 3. A — <code>java -jar app.jar</code>.</p>
+      </details>
+    </section>
+  </main>
+</body>
+</html>

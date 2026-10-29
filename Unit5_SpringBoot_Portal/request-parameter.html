@@ -1,0 +1,248 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#10254b">
+  <meta name="description" content="Learn Spring MVC @RequestParam for query parameters, optional values, defaults, repeated parameters, validation, conversion, and testing.">
+  <title>Request Parameters in Spring Boot | CS336B</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header>
+    <p class="eyebrow">Unit 5 · Spring Boot &amp; RESTful Web Services</p>
+    <h1>Request Parameters in Spring Boot</h1>
+    <p class="lesson-subtitle">Read filters, pagination, sorting, and optional values from the URL query string with Spring MVC.</p>
+  </header>
+
+  <main class="container lesson">
+    <nav class="nav" aria-label="Lesson navigation">
+      <a class="btn" href="path-variable.html">← Previous: Path Variable</a>
+      <a class="btn" href="unit5.html">Unit 5 Home</a>
+      <a class="btn" href="get-api.html">Next: GET API →</a>
+    </nav>
+
+    <section class="lesson-section" aria-labelledby="outcomes">
+      <h2 id="outcomes">Learning outcomes</h2>
+      <p>After this lesson, you should be able to bind query-string values with <code>@RequestParam</code>, configure optional parameters and defaults, handle repeated parameters and conversion, validate user-supplied values, and design testable collection endpoints.</p>
+      <div class="callout">
+        <strong>Use query parameters to refine a request.</strong> In <code>/api/courses?department=CS&amp;page=0</code>, the path identifies the collection and the query parameters filter or paginate it.
+      </div>
+    </section>
+
+    <section class="lesson-section" aria-labelledby="visual">
+      <h2 id="visual">1. Anatomy of a query string</h2>
+      <p>Query parameters begin after <code>?</code>. Each name-value pair is separated by <code>&amp;</code>. The query string modifies the request; it is not part of the resource path.</p>
+      <figure class="infographic">
+        <svg viewBox="0 0 920 250" role="img" aria-labelledby="query-svg-title query-svg-desc" xmlns="http://www.w3.org/2000/svg">
+          <title id="query-svg-title">Parts of a URL with query parameters</title>
+          <desc id="query-svg-desc">The URL GET /api/courses?department=CS&amp;page=0 is divided into the HTTP method, resource path, question mark, and two query parameter key-value pairs.</desc>
+          <rect x="18" y="24" width="884" height="202" rx="18" fill="#f3f7ff" stroke="#d7e4f6"/>
+          <text x="54" y="91" fill="#10254b" font-family="Arial, sans-serif" font-size="24" font-weight="700">GET</text>
+          <text x="54" y="126" fill="#64748b" font-family="Arial, sans-serif" font-size="14">HTTP method</text>
+          <text x="157" y="91" fill="#10254b" font-family="monospace" font-size="24" font-weight="700">/api/courses</text>
+          <text x="157" y="126" fill="#64748b" font-family="Arial, sans-serif" font-size="14">resource path</text>
+          <text x="375" y="91" fill="#1769e0" font-family="monospace" font-size="24" font-weight="700">?</text>
+          <text x="356" y="126" fill="#64748b" font-family="Arial, sans-serif" font-size="14">starts query</text>
+          <rect x="404" y="61" width="194" height="51" rx="10" fill="#dcecff"/>
+          <text x="421" y="94" fill="#174e9e" font-family="monospace" font-size="20" font-weight="700">department=CS</text>
+          <text x="438" y="144" fill="#64748b" font-family="Arial, sans-serif" font-size="14">name = value</text>
+          <text x="607" y="93" fill="#1769e0" font-family="monospace" font-size="23" font-weight="700">&amp;</text>
+          <text x="640" y="91" fill="#174e9e" font-family="monospace" font-size="20" font-weight="700">page=0</text>
+          <text x="647" y="126" fill="#64748b" font-family="Arial, sans-serif" font-size="14">another parameter</text>
+          <path d="M412 166 H886" stroke="#9bb9e3" stroke-width="2" stroke-dasharray="6 6"/>
+          <text x="427" y="197" fill="#334155" font-family="Arial, sans-serif" font-size="15">Use for filters, pagination, sorting, and optional modifiers</text>
+        </svg>
+        <figcaption>Example URL: <code>GET /api/courses?department=CS&amp;page=0</code>. Query order usually does not change parameter meaning.</figcaption>
+      </figure>
+    </section>
+
+    <section class="lesson-section" aria-labelledby="basic">
+      <h2 id="basic">2. Basic <code>@RequestParam</code> usage</h2>
+      <p>Spring MVC binds request parameters to method arguments by name. A request parameter is required by default. Names are clearer and more robust when explicitly declared.</p>
+      <pre><code>@RestController
+@RequestMapping("/api/courses")
+public class CourseController {
+    private final CourseService courseService;
+
+    public CourseController(CourseService courseService) {
+        this.courseService = courseService;
+    }
+
+    @GetMapping
+    public List&lt;CourseResponse&gt; search(
+            @RequestParam("department") String department) {
+        return courseService.findByDepartment(department);
+    }
+}</code></pre>
+      <p>Request example:</p>
+      <pre><code>GET /api/courses?department=CS</code></pre>
+      <p>The query parameter name and the annotation name must match. If it is required and absent, Spring rejects the request before invoking the controller (typically with <code>400 Bad Request</code>).</p>
+    </section>
+
+    <section class="lesson-section" aria-labelledby="optional">
+      <h2 id="optional">3. Optional parameters and defaults</h2>
+      <p>Use <code>required = false</code> when omission is meaningful, or use <code>defaultValue</code> when the endpoint has a sensible default. Specifying <code>defaultValue</code> also makes the parameter non-required.</p>
+      <pre><code>@GetMapping
+public Page&lt;CourseResponse&gt; search(
+        @RequestParam(required = false) String department,
+        @RequestParam(defaultValue = "0") int page,
+        @RequestParam(defaultValue = "20") int size) {
+    return courseService.search(department, page, size);
+}</code></pre>
+      <ul>
+        <li><code>?department=CS&amp;page=0&amp;size=20</code> supplies all values.</li>
+        <li><code>?page=1</code> leaves department absent and uses the default size.</li>
+        <li><code>@RequestParam(required = false) String department</code> binds a missing value to <code>null</code>.</li>
+        <li>Defaults should be documented and limits enforced; a client should not be able to request an unbounded page accidentally.</li>
+      </ul>
+      <div class="callout">
+        <strong>Be careful with primitives:</strong> a primitive such as <code>int</code> cannot represent <code>null</code>. Use a wrapper such as <code>Integer</code> for an optional value without a default, or supply a default value.
+      </div>
+    </section>
+
+    <section class="lesson-section" aria-labelledby="types">
+      <h2 id="types">4. Type conversion and repeated values</h2>
+      <p>Request parameters arrive as text. Spring MVC converts them to common Java types such as numbers, booleans, enums, dates, and collections. Conversion failures usually result in <code>400 Bad Request</code>.</p>
+      <pre><code>public List&lt;CourseResponse&gt; filter(
+        @RequestParam(required = false) CourseLevel level,
+        @RequestParam(required = false) List&lt;String&gt; tag,
+        @RequestParam(defaultValue = "false") boolean active) {
+    return courseService.filter(level, tag, active);
+}</code></pre>
+      <p>A request can include repeated parameter names:</p>
+      <pre><code>GET /api/courses?tag=java&amp;tag=spring&amp;active=true</code></pre>
+      <p>Here, Spring can bind the repeated <code>tag</code> values to a list. A comma-separated string such as <code>?tag=java,spring</code> is a different representation; use it only if the API documents that format and the chosen conversion behavior is understood.</p>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Java type</th><th>Example query value</th><th>Notes</th></tr></thead>
+          <tbody>
+            <tr><td><code>int</code> / <code>long</code></td><td><code>page=2</code></td><td>Invalid numeric text cannot be converted.</td></tr>
+            <tr><td><code>boolean</code></td><td><code>active=true</code></td><td>Document accepted values and defaults.</td></tr>
+            <tr><td><code>enum</code></td><td><code>level=UNDERGRADUATE</code></td><td>Value must match a supported enum representation.</td></tr>
+            <tr><td><code>List&lt;String&gt;</code></td><td><code>tag=java&amp;tag=spring</code></td><td>Repeated names can bind to a collection.</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="lesson-section" aria-labelledby="validation">
+      <h2 id="validation">5. Validate parameter values</h2>
+      <p>Binding converts a string but does not enforce business limits. Validate pagination, ranges, and formats before using them. For controller method parameter constraints, use Jakarta Validation constraints and activate method validation as required by the Spring Boot version and application setup.</p>
+      <pre><code>import jakarta.validation.constraints.Max;
+import jakarta.validation.constraints.Min;
+import org.springframework.validation.annotation.Validated;
+
+@RestController
+@Validated
+@RequestMapping("/api/courses")
+public class CourseController {
+    @GetMapping
+    public Page&lt;CourseResponse&gt; list(
+            @RequestParam(defaultValue = "0")
+            @Min(0) int page,
+            @RequestParam(defaultValue = "20")
+            @Min(1) @Max(100) int size) {
+        return courseService.list(page, size);
+    }
+}</code></pre>
+      <p>With the validation starter present, method parameter constraints are checked when method validation is enabled. Confirm the exact activation behavior for your Spring Boot/Spring Framework version. Invalid values should produce a documented client error, not be silently clamped unless that behavior is explicitly part of the API contract.</p>
+    </section>
+
+    <section class="lesson-section" aria-labelledby="binding">
+      <h2 id="binding">6. Query parameters vs. other request data</h2>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Data location</th><th>Example</th><th>Typical Spring annotation</th><th>Use for</th></tr></thead>
+          <tbody>
+            <tr><td>Path</td><td><code>/api/courses/42</code></td><td><code>@PathVariable</code></td><td>Identifying a resource.</td></tr>
+            <tr><td>Query string</td><td><code>?page=0&amp;size=20</code></td><td><code>@RequestParam</code></td><td>Filters and optional modifiers.</td></tr>
+            <tr><td>Header</td><td><code>Accept-Language: en</code></td><td><code>@RequestHeader</code></td><td>Request metadata and preferences.</td></tr>
+            <tr><td>Body</td><td>JSON object</td><td><code>@RequestBody</code></td><td>Structured create or update data.</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="lesson-section" aria-labelledby="encoding">
+      <h2 id="encoding">7. URL encoding and API design</h2>
+      <p>Query strings are part of a URL and must be encoded correctly. Reserved characters, spaces, and non-ASCII text should be percent-encoded by a URL builder or HTTP client rather than concatenated manually.</p>
+      <ul>
+        <li>Use query parameters for filtering, pagination, sorting, search, and optional representation controls.</li>
+        <li>Use a stable resource path for the collection or item, such as <code>/api/courses</code>.</li>
+        <li>Set a maximum page size and validate sort fields against an allowlist; never pass arbitrary client values into SQL or dynamic query fragments.</li>
+        <li>Do not put passwords, tokens, or other secrets in query strings. URLs can be retained in browser history, proxy logs, analytics, and referrer data.</li>
+        <li>Document whether filters are case-sensitive, how repeated parameters behave, and what happens for unknown or invalid values.</li>
+      </ul>
+    </section>
+
+    <section class="lesson-section" aria-labelledby="curl">
+      <h2 id="curl">8. Call the endpoint</h2>
+      <p>A query string can be sent directly in the request URL:</p>
+      <pre><code>curl -G "http://localhost:8080/api/courses" \
+  --data-urlencode "department=Computer Science" \
+  --data-urlencode "page=0" \
+  --data-urlencode "size=20"</code></pre>
+      <p><code>--data-urlencode</code> safely encodes values such as those containing spaces. In browser-based clients, use the URL or query-parameter builder rather than manually joining raw values.</p>
+    </section>
+
+    <section class="lesson-section" aria-labelledby="testing">
+      <h2 id="testing">9. Test request parameters</h2>
+      <p>Controller tests should cover provided, omitted, invalid, repeated, and boundary values. A MockMvc test can verify the public contract without starting a network server.</p>
+      <pre><code>mockMvc.perform(get("/api/courses")
+        .param("department", "CS")
+        .param("page", "0")
+        .param("size", "20"))
+    .andExpect(status().isOk())
+    .andExpect(jsonPath("$.content").isArray());
+
+mockMvc.perform(get("/api/courses")
+        .param("page", "-1"))
+    .andExpect(status().isBadRequest());</code></pre>
+      <p>Also test default behavior when parameters are absent, maximum page-size enforcement, conversion errors, and repeated parameter handling. Assert stable statuses and response shapes, not internal exception messages.</p>
+    </section>
+
+    <section class="lesson-section" aria-labelledby="troubleshooting">
+      <h2 id="troubleshooting">10. Troubleshooting</h2>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Symptom</th><th>Likely cause</th><th>What to check</th></tr></thead>
+          <tbody>
+            <tr><td><code>400 Bad Request</code> when omitted</td><td>Parameter is required and has no default.</td><td>Set <code>required = false</code> or provide a meaningful default.</td></tr>
+            <tr><td><code>400 Bad Request</code> for a supplied value</td><td>Type conversion or validation failed.</td><td>Check exact parameter name, numeric format, enum values, and constraints.</td></tr>
+            <tr><td>Optional parameter is unexpectedly zero/false</td><td>Primitive parameter or configured default is supplying a value.</td><td>Use a wrapper type for nullable values or revise the default.</td></tr>
+            <tr><td>Only one repeated value is received</td><td>Parameter is bound to a scalar instead of a collection.</td><td>Use a list/array and document the expected repeated-query format.</td></tr>
+            <tr><td>Spaces or special characters break the URL</td><td>Query value was not URL-encoded.</td><td>Use an HTTP client’s query builder or URL encoding support.</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="lesson-section" aria-labelledby="questions">
+      <h2 id="questions">Interview questions</h2>
+      <ol>
+        <li><strong>What does <code>@RequestParam</code> bind?</strong><br>It binds a query or form request parameter to a controller method argument.</li>
+        <li><strong>Are request parameters required by default?</strong><br>Yes. Use <code>required = false</code> or <code>defaultValue</code> when omission is allowed.</li>
+        <li><strong>How do you receive repeated query parameters?</strong><br>Bind them to a collection such as <code>List&lt;String&gt;</code> and send repeated names, for example <code>?tag=java&amp;tag=spring</code>.</li>
+        <li><strong>What is the difference between <code>@RequestParam</code> and <code>@PathVariable</code>?</strong><br>Request parameters refine a request; path variables identify a resource in the URI path.</li>
+        <li><strong>Why should page size be limited?</strong><br>To prevent accidental or abusive requests from returning too much data and consuming excessive resources.</li>
+        <li><strong>Why should secrets not be put in a query string?</strong><br>URLs are commonly retained in logs, history, monitoring, and referrer information.</li>
+      </ol>
+    </section>
+
+    <section class="lesson-section" aria-labelledby="quiz">
+      <h2 id="quiz">Quick check</h2>
+      <ol class="quiz">
+        <li>Which annotation is normally used for a query-string value?<br><span>A. @PathVariable &nbsp; B. @RequestParam &nbsp; C. @RequestBody &nbsp; D. @ResponseBody</span></li>
+        <li>What does <code>defaultValue</code> do to a request parameter?<br><span>A. Makes omission acceptable and supplies a fallback &nbsp; B. Forces a request body &nbsp; C. Changes the HTTP method &nbsp; D. Disables type conversion</span></li>
+        <li>Which query format represents two values for the same parameter name?<br><span>A. ?tag=java&amp;tag=spring &nbsp; B. /tag/java/spring &nbsp; C. ?tag &nbsp; D. #tag=java</span></li>
+        <li>Which parameter is best for identifying a single course resource?<br><span>A. page query parameter &nbsp; B. Path variable in /courses/{id} &nbsp; C. Accept header &nbsp; D. Request body in a GET</span></li>
+      </ol>
+      <details class="answer-key">
+        <summary>Show answers</summary>
+        <p>1. B — <code>@RequestParam</code>. 2. A — it makes the value optional and supplies the fallback. 3. A — repeated query parameter names. 4. B — a path variable identifies the item.</p>
+      </details>
+    </section>
+  </main>
+</body>
+</html>

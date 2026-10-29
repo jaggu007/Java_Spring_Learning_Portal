@@ -1,0 +1,311 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#10254b">
+  <meta name="description" content="Learn how to build GET endpoints in Spring Boot, retrieve resources, filter and paginate collections, handle errors, and add endpoints to a project.">
+  <title>GET API in Spring Boot | CS336B</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header>
+    <p class="eyebrow">Unit 5 · Spring Boot &amp; RESTful Web Services</p>
+    <h1>Building a GET API</h1>
+    <p class="lesson-subtitle">Retrieve resources and collections with Spring Boot, using clear routes, query parameters, correct HTTP responses, and tests.</p>
+  </header>
+
+  <main class="container lesson">
+    <nav class="nav" aria-label="Lesson navigation">
+      <a class="btn" href="request-parameter.html">← Previous: Request Parameter</a>
+      <a class="btn" href="unit5.html">Unit 5 Home</a>
+      <a class="btn" href="post-api.html">Next: POST API →</a>
+    </nav>
+
+    <section class="lesson-section" aria-labelledby="outcomes">
+      <h2 id="outcomes">Learning outcomes</h2>
+      <p>After this lesson, you should be able to add a GET endpoint to a Spring Boot project, retrieve one resource or a collection, use query parameters for filtering and pagination, choose appropriate responses, and test the endpoint.</p>
+      <div class="callout">
+        <strong>GET requests should be safe and idempotent.</strong> A GET handler should retrieve data, not create, update, or delete it. Repeating the same request should have no additional state-changing effect.
+      </div>
+    </section>
+
+    <section class="lesson-section" aria-labelledby="flow">
+      <h2 id="flow">1. GET request flow</h2>
+      <p>A client sends an HTTP GET request. Spring MVC selects a matching controller method, the application retrieves data, and Spring serializes the returned response into the HTTP representation.</p>
+      <figure class="infographic">
+        <svg viewBox="0 0 960 220" role="img" aria-labelledby="get-flow-title get-flow-desc" xmlns="http://www.w3.org/2000/svg">
+          <title id="get-flow-title">Spring Boot GET request flow</title>
+          <desc id="get-flow-desc">A client sends a GET request to a controller, which calls a service and repository, then returns a response with an HTTP status and JSON body.</desc>
+          <rect x="12" y="24" width="936" height="174" rx="18" fill="#f3f7ff" stroke="#d7e4f6"/>
+          <g font-family="Arial, sans-serif" text-anchor="middle">
+            <rect x="35" y="75" width="145" height="68" rx="12" fill="#dcecff"/>
+            <text x="107" y="105" fill="#10254b" font-size="17" font-weight="700">Client</text>
+            <text x="107" y="127" fill="#475569" font-size="13">GET /api/courses/42</text>
+            <path d="M183 109 H231" stroke="#1769e0" stroke-width="3"/><path d="M231 109 l-10 -7 v14 z" fill="#1769e0"/>
+            <rect x="239" y="75" width="145" height="68" rx="12" fill="#fff" stroke="#b8cdea"/>
+            <text x="311" y="105" fill="#10254b" font-size="17" font-weight="700">Controller</text>
+            <text x="311" y="127" fill="#475569" font-size="13">@GetMapping</text>
+            <path d="M387 109 H435" stroke="#1769e0" stroke-width="3"/><path d="M435 109 l-10 -7 v14 z" fill="#1769e0"/>
+            <rect x="443" y="75" width="145" height="68" rx="12" fill="#fff" stroke="#b8cdea"/>
+            <text x="515" y="105" fill="#10254b" font-size="17" font-weight="700">Service</text>
+            <text x="515" y="127" fill="#475569" font-size="13">Application logic</text>
+            <path d="M591 109 H639" stroke="#1769e0" stroke-width="3"/><path d="M639 109 l-10 -7 v14 z" fill="#1769e0"/>
+            <rect x="647" y="75" width="145" height="68" rx="12" fill="#fff" stroke="#b8cdea"/>
+            <text x="719" y="105" fill="#10254b" font-size="17" font-weight="700">Repository</text>
+            <text x="719" y="127" fill="#475569" font-size="13">Read data</text>
+            <path d="M795 109 H843" stroke="#1769e0" stroke-width="3"/><path d="M843 109 l-10 -7 v14 z" fill="#1769e0"/>
+            <rect x="851" y="75" width="80" height="68" rx="12" fill="#dff5ee"/>
+            <text x="891" y="103" fill="#145744" font-size="16" font-weight="700">JSON</text>
+            <text x="891" y="125" fill="#33695c" font-size="12">200 / 404</text>
+            <text x="480" y="175" fill="#64748b" font-size="13">Response returns with status, headers, and representation</text>
+          </g>
+        </svg>
+        <figcaption>Typical layered flow. For a small prototype, a service may use an in-memory data source; production applications generally retrieve data through a repository.</figcaption>
+      </figure>
+    </section>
+
+    <section class="lesson-section" aria-labelledby="design">
+      <h2 id="design">2. Design the GET routes</h2>
+      <p>Use a path variable to identify an item and query parameters to refine a collection request.</p>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Purpose</th><th>HTTP request</th><th>Typical result</th></tr></thead>
+          <tbody>
+            <tr><td>List courses</td><td><code>GET /api/courses</code></td><td><code>200 OK</code> with a JSON array or page.</td></tr>
+            <tr><td>Read one course</td><td><code>GET /api/courses/42</code></td><td><code>200 OK</code> or <code>404 Not Found</code>.</td></tr>
+            <tr><td>Filter courses</td><td><code>GET /api/courses?department=CS</code></td><td><code>200 OK</code> with matching results.</td></tr>
+            <tr><td>Paginate courses</td><td><code>GET /api/courses?page=0&amp;size=20</code></td><td><code>200 OK</code> with a bounded page.</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p>GET requests generally should not require a request body. Put filters in the query string so clients, browsers, and caches can identify the requested representation using the URI.</p>
+    </section>
+
+    <section class="lesson-section" aria-labelledby="project">
+      <h2 id="project">3. Incorporate a GET API into a Spring Boot project</h2>
+      <h3>Step 1: Add the web dependency</h3>
+      <p>For a Maven project, make sure the Spring Boot web starter is present. If the project was created with Spring Initializr and already includes this starter, do not add it a second time.</p>
+      <pre><code>&lt;dependency&gt;
+    &lt;groupId&gt;org.springframework.boot&lt;/groupId&gt;
+    &lt;artifactId&gt;spring-boot-starter-web&lt;/artifactId&gt;
+&lt;/dependency&gt;</code></pre>
+      <p>The web starter supplies Spring MVC and the usual JSON support. A typical source layout is:</p>
+      <pre><code>src/main/java/com/example/course/
+├── CourseApplication.java
+├── controller/CourseController.java
+├── service/CourseService.java
+├── repository/CourseRepository.java
+└── dto/CourseResponse.java</code></pre>
+      <h3>Step 2: Define a response DTO</h3>
+      <p>A DTO defines the fields the API exposes. Avoid returning a database entity directly when it contains internal or sensitive fields.</p>
+      <pre><code>package com.example.course.dto;
+
+public record CourseResponse(
+        long id,
+        String code,
+        String title,
+        int credits,
+        String department
+) {}</code></pre>
+      <h3>Step 3: Put retrieval logic behind a service</h3>
+      <p>This in-memory service makes the example runnable without a database. Data resets when the process restarts; replace it with a repository-backed implementation when persistent storage is required.</p>
+      <pre><code>package com.example.course.service;
+
+import java.util.List;
+import java.util.Optional;
+
+import com.example.course.dto.CourseResponse;
+import org.springframework.stereotype.Service;
+
+@Service
+public class CourseService {
+    private final List&lt;CourseResponse&gt; courses = List.of(
+            new CourseResponse(42L, "CS336B",
+                    "OOPS with Java", 4, "CS"),
+            new CourseResponse(43L, "CS210",
+                    "Data Structures", 4, "CS")
+    );
+
+    public List&lt;CourseResponse&gt; findAll() {
+        return courses;
+    }
+
+    public Optional&lt;CourseResponse&gt; findById(long id) {
+        return courses.stream()
+                .filter(course -&gt; course.id() == id)
+                .findFirst();
+    }
+
+    public List&lt;CourseResponse&gt; search(String department) {
+        if (department == null || department.isBlank()) {
+            return findAll();
+        }
+        return courses.stream()
+                .filter(course -&gt; course.department()
+                        .equalsIgnoreCase(department))
+                .toList();
+    }
+}</code></pre>
+      <p>The sample models a department field and filters case-insensitively. In a database-backed application, perform this filtering in the repository query instead of loading every row into memory.</p>
+      <h3>Step 4: Expose controller endpoints</h3>
+      <pre><code>package com.example.course.controller;
+
+import java.util.List;
+
+import com.example.course.dto.CourseResponse;
+import com.example.course.service.CourseService;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.RestController;
+
+@RestController
+@RequestMapping("/api/courses")
+public class CourseController {
+    private final CourseService courseService;
+
+    public CourseController(CourseService courseService) {
+        this.courseService = courseService;
+    }
+
+    @GetMapping
+    public List&lt;CourseResponse&gt; listCourses(
+            @RequestParam(required = false) String department) {
+        return courseService.search(department);
+    }
+
+    @GetMapping("/{id}")
+    public ResponseEntity&lt;CourseResponse&gt; getCourse(
+            @PathVariable long id) {
+        return courseService.findById(id)
+                .map(ResponseEntity::ok)
+                .orElseGet(() -&gt; ResponseEntity.notFound().build());
+    }
+}</code></pre>
+      <h3>Step 5: Run and call it</h3>
+      <pre><code>./mvnw spring-boot:run
+
+curl -i http://localhost:8080/api/courses
+curl -i http://localhost:8080/api/courses/42</code></pre>
+      <p>On Windows, run <code>mvnw.cmd spring-boot:run</code>. With the sample in-memory data, the first route returns both courses as JSON and the second returns the course with ID 42. A missing ID returns <code>404 Not Found</code>.</p>
+    </section>
+
+    <section class="lesson-section" aria-labelledby="repository">
+      <h2 id="repository">4. Replace the demo with a database repository</h2>
+      <p>For persistent data, add the appropriate Spring Data starter and database driver, define a persistence entity and repository, then have the service query the repository. Keep the controller contract independent of persistence details.</p>
+      <pre><code>public interface CourseRepository
+        extends JpaRepository&lt;CourseEntity, Long&gt; {
+    List&lt;CourseEntity&gt; findByDepartmentIgnoreCase(String department);
+}</code></pre>
+      <p>A repository-backed service can map entities to DTOs:</p>
+      <pre><code>@Service
+public class CourseService {
+    private final CourseRepository repository;
+
+    public CourseService(CourseRepository repository) {
+        this.repository = repository;
+    }
+
+    public Optional&lt;CourseResponse&gt; findById(long id) {
+        return repository.findById(id).map(course -&gt;
+                new CourseResponse(course.getId(), course.getCode(),
+                        course.getTitle(), course.getCredits(),
+                        course.getDepartment()));
+    }
+}</code></pre>
+      <p>This repository example assumes a <code>CourseEntity</code> with the shown getters and the Spring Data JPA dependency/configuration. For large collections, use database-side pagination and filtering rather than loading every row into memory.</p>
+    </section>
+
+    <section class="lesson-section" aria-labelledby="responses">
+      <h2 id="responses">5. Status codes and response behavior</h2>
+      <ul>
+        <li><strong><code>200 OK</code>:</strong> the resource or collection was found and returned.</li>
+        <li><strong><code>404 Not Found</code>:</strong> the requested item does not exist or is not visible to the caller, according to the API’s disclosure policy.</li>
+        <li><strong><code>400 Bad Request</code>:</strong> an identifier or query parameter could not be converted or failed validation.</li>
+        <li><strong><code>401 Unauthorized</code> / <code>403 Forbidden</code>:</strong> authentication or authorization requirements were not met.</li>
+      </ul>
+      <p>A collection with no matches normally returns <code>200 OK</code> and an empty collection, not <code>404</code>. Consider consistent error bodies, documented pagination metadata, and appropriate cache headers for data that can be cached.</p>
+    </section>
+
+    <section class="lesson-section" aria-labelledby="pagination">
+      <h2 id="pagination">6. Filtering and pagination</h2>
+      <p>Collection endpoints should accept bounded filters and pagination where appropriate. Validate the page number, enforce a maximum size, and apply filtering and ordering in the data source for large datasets.</p>
+      <pre><code>@GetMapping
+public Page&lt;CourseResponse&gt; listCourses(
+        @RequestParam(required = false) String department,
+        @PageableDefault(size = 20, sort = "title")
+        Pageable pageable) {
+    return courseService.search(department, pageable);
+}</code></pre>
+      <p>Spring Data Web support can resolve a <code>Pageable</code> from parameters such as <code>?page=0&amp;size=20&amp;sort=title,asc</code> when the relevant Spring Data dependency is present. Configure maximum page size and allowlist sort properties so clients cannot request excessive data or arbitrary persistence fields.</p>
+    </section>
+
+    <section class="lesson-section" aria-labelledby="testing">
+      <h2 id="testing">7. Test a GET API</h2>
+      <p>Test the observable contract: status code, JSON fields, empty results, missing resources, filters, and validation. A <code>@WebMvcTest</code> with MockMvc can focus on the web layer.</p>
+      <pre><code>@WebMvcTest(CourseController.class)
+class CourseControllerTest {
+    @Autowired
+    MockMvc mockMvc;
+
+    @MockitoBean
+    CourseService courseService;
+
+    @Test
+    void returnsCourseById() throws Exception {
+        when(courseService.findById(42L))
+                .thenReturn(Optional.of(new CourseResponse(
+                        42L, "CS336B", "OOPS with Java", 4, "CS")));
+
+        mockMvc.perform(get("/api/courses/42")
+                .accept(MediaType.APPLICATION_JSON))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.code").value("CS336B"));
+    }
+}</code></pre>
+      <p>The <code>@MockitoBean</code> annotation is available in recent Spring Framework versions; projects on older Spring Boot versions may use that version’s supported mock-bean annotation. Add imports for JUnit, MockMvc, Mockito, and JSONPath from the project’s test starter.</p>
+    </section>
+
+    <section class="lesson-section" aria-labelledby="production">
+      <h2 id="production">8. Production considerations</h2>
+      <ul>
+        <li><strong>Keep GET read-only:</strong> do not trigger updates or irreversible actions from retrieval endpoints.</li>
+        <li><strong>Authorize every resource:</strong> knowing an ID does not grant access. Scope queries to the authenticated user or tenant when required.</li>
+        <li><strong>Limit result size:</strong> do not return unbounded tables; use pagination and sensible maximums.</li>
+        <li><strong>Avoid N+1 queries:</strong> inspect data access behavior when serializing collections and associations.</li>
+        <li><strong>Control response fields:</strong> use DTOs and avoid exposing internal or sensitive data.</li>
+        <li><strong>Use caching carefully:</strong> cache only when responses are safe to reuse and authorization context is handled correctly.</li>
+        <li><strong>Use HTTPS:</strong> protect data in transit even when the endpoint only reads information.</li>
+      </ul>
+    </section>
+
+    <section class="lesson-section" aria-labelledby="questions">
+      <h2 id="questions">Interview questions</h2>
+      <ol>
+        <li><strong>What does <code>@GetMapping</code> do?</strong><br>It maps HTTP GET requests matching its path and conditions to a controller handler method.</li>
+        <li><strong>Why should GET be safe and idempotent?</strong><br>Clients, proxies, and caches may repeat or prefetch GET requests; repeating a read should not cause additional state changes.</li>
+        <li><strong>What is the usual response when a single requested resource is absent?</strong><br><code>404 Not Found</code>.</li>
+        <li><strong>What should an empty collection endpoint return?</strong><br>Usually <code>200 OK</code> with an empty collection, since the collection resource exists even when it has no matching items.</li>
+        <li><strong>Why use a service between controller and repository?</strong><br>It keeps HTTP concerns separate from use-case logic and data-access concerns.</li>
+        <li><strong>How should a large collection be exposed?</strong><br>With bounded pagination and filtering applied at the data source, not by returning the entire dataset.</li>
+      </ol>
+    </section>
+
+    <section class="lesson-section" aria-labelledby="quiz">
+      <h2 id="quiz">Quick check</h2>
+      <ol class="quiz">
+        <li>Which annotation maps an HTTP GET request in Spring MVC?<br><span>A. @PostMapping &nbsp; B. @GetMapping &nbsp; C. @RequestBody &nbsp; D. @PutMapping</span></li>
+        <li>What should a collection endpoint normally return when no items match?<br><span>A. 404 &nbsp; B. 200 with an empty collection &nbsp; C. 500 &nbsp; D. 201</span></li>
+        <li>Which layer should normally coordinate data retrieval and application rules?<br><span>A. Service &nbsp; B. HTML header &nbsp; C. HTTP client &nbsp; D. Build plugin</span></li>
+      </ol>
+      <details class="answer-key">
+        <summary>Show answers</summary>
+        <p>1. B — <code>@GetMapping</code>. 2. B — an empty collection with <code>200 OK</code>. 3. A — the service layer.</p>
+      </details>
+    </section>
+  </main>
+</body>
+</html>

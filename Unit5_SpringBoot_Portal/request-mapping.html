@@ -1,0 +1,224 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#10254b">
+  <meta name="description" content="Learn Spring MVC request mapping with path patterns, HTTP methods, headers, parameters, media types, request dispatch, and troubleshooting.">
+  <title>Request Mapping in Spring MVC | CS336B</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header>
+    <p class="eyebrow">Unit 5 · Spring Boot &amp; RESTful Web Services</p>
+    <h1>Request Mapping in Spring MVC</h1>
+    <p class="lesson-subtitle">Connect HTTP methods, paths, headers, parameters, and media types to the correct controller handler.</p>
+  </header>
+
+  <main class="container lesson">
+    <nav class="nav" aria-label="Lesson navigation">
+      <a class="btn" href="rest-controller.html">← Previous: REST Controller</a>
+      <a class="btn" href="unit5.html">Unit 5 Home</a>
+      <a class="btn" href="request-body.html">Next: Request Body →</a>
+    </nav>
+
+    <section class="lesson-section" aria-labelledby="outcomes">
+      <h2 id="outcomes">Learning outcomes</h2>
+      <p>After this lesson, you should be able to compose class-level and method-level mappings, constrain handlers by HTTP method, path, parameters, headers, and media type, recognize mapping conflicts, and diagnose common HTTP mapping errors.</p>
+      <div class="callout">
+        <strong>Mapping principle:</strong> A handler should match the request characteristics that define its operation. Make routes specific and unambiguous instead of relying on method declaration order.
+      </div>
+    </section>
+
+    <section class="lesson-section" aria-labelledby="dispatch">
+      <h2 id="dispatch">1. How Spring selects a handler</h2>
+      <p>At startup, Spring MVC discovers annotated controller methods and registers their mapping conditions. At runtime, the dispatcher compares an incoming request with those conditions and invokes the matching handler through the MVC infrastructure.</p>
+      <figure class="diagram">
+        <div class="mermaid" role="img" aria-label="Flow diagram showing an HTTP request passing through DispatcherServlet, matching a controller route, binding inputs, invoking the handler, and producing an HTTP response.">
+flowchart LR
+    A["HTTP request<br/>method, path, headers, params, body"] --> B["DispatcherServlet"]
+    B --> C{"Mapping conditions<br/>match a handler?"}
+    C -->|No match| D["HTTP error response<br/>404 / 405 / 406 / 415"]
+    C -->|Match| E["Bind arguments<br/>path, query, headers, body"]
+    E --> F["Invoke controller handler"]
+    F --> G["Return value + status"]
+    G --> H["HTTP response<br/>headers and body"]
+        </div>
+        <figcaption>Conceptual request flow; exact processing also involves Spring MVC argument resolvers, message converters, and exception resolvers.</figcaption>
+      </figure>
+      <p>The <code>DispatcherServlet</code> is Spring MVC’s front controller. Handler mapping infrastructure identifies a suitable controller method; argument resolvers and message converters prepare its parameters; return-value handling builds the response. Exceptions can be translated by controller advice or other exception resolvers.</p>
+    </section>
+
+    <section class="lesson-section" aria-labelledby="annotations">
+      <h2 id="annotations">2. Mapping annotations</h2>
+      <p><code>@RequestMapping</code> is the general mapping annotation. Composed annotations express common HTTP methods more clearly:</p>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Annotation</th><th>HTTP method</th><th>Typical purpose</th></tr></thead>
+          <tbody>
+            <tr><td><code>@GetMapping</code></td><td>GET</td><td>Read a resource or collection.</td></tr>
+            <tr><td><code>@PostMapping</code></td><td>POST</td><td>Create a resource or submit a command.</td></tr>
+            <tr><td><code>@PutMapping</code></td><td>PUT</td><td>Replace a resource at a known URI.</td></tr>
+            <tr><td><code>@PatchMapping</code></td><td>PATCH</td><td>Apply a partial update.</td></tr>
+            <tr><td><code>@DeleteMapping</code></td><td>DELETE</td><td>Delete a resource.</td></tr>
+            <tr><td><code>@RequestMapping</code></td><td>Any or configured method</td><td>Shared prefixes or less common mapping conditions.</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p>These are composed forms of <code>@RequestMapping</code>. Use the specific annotations for ordinary CRUD endpoints so the method semantics are visible in the code.</p>
+    </section>
+
+    <section class="lesson-section" aria-labelledby="compose">
+      <h2 id="compose">3. Compose class and method paths</h2>
+      <p>A class-level mapping commonly defines the resource prefix; the method-level mapping adds a subpath. For example, <code>@RequestMapping("/api/courses")</code> combined with <code>@GetMapping("/{courseId}")</code> matches <code>GET /api/courses/42</code>.</p>
+      <pre><code>@RestController
+@RequestMapping("/api/courses")
+public class CourseController {
+    @GetMapping
+    public List&lt;CourseResponse&gt; listCourses() {
+        return courseService.findAll();
+    }
+
+    @GetMapping("/{courseId}")
+    public CourseResponse getCourse(
+            @PathVariable long courseId) {
+        return courseService.findById(courseId);
+    }
+
+    @PostMapping
+    public ResponseEntity&lt;CourseResponse&gt; createCourse(
+            @RequestBody CreateCourseRequest request) {
+        CourseResponse created = courseService.create(request);
+        return ResponseEntity.status(HttpStatus.CREATED).body(created);
+    }
+}</code></pre>
+      <p>Path variable names can be inferred when the Java compiler preserves parameter names and the framework can discover them. Naming them explicitly—for example <code>@PathVariable("courseId")</code>—makes the binding contract clear and robust across compiler settings.</p>
+    </section>
+
+    <section class="lesson-section" aria-labelledby="conditions">
+      <h2 id="conditions">4. Mapping conditions</h2>
+      <p>Spring can match a handler using more than the URL. A request mapping may specify a path, method, query parameter conditions, header conditions, <code>consumes</code>, and <code>produces</code>.</p>
+      <pre><code>@PostMapping(
+    path = "/imports",
+    consumes = "application/json",
+    produces = "application/json",
+    params = "mode=validate"
+)
+public ImportResult validateImport(
+        @RequestBody ImportRequest request,
+        @RequestHeader("X-Request-Id") String requestId) {
+    return importService.validate(request, requestId);
+}</code></pre>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Condition</th><th>What it matches</th><th>Common mismatch</th></tr></thead>
+          <tbody>
+            <tr><td><code>method</code></td><td>HTTP verb such as GET or POST.</td><td>Calling a POST-only route with GET can produce <code>405 Method Not Allowed</code>.</td></tr>
+            <tr><td><code>params</code></td><td>Query/form parameters that must be present, absent, or equal a value.</td><td>Missing or unequal required parameter means this mapping is not selected.</td></tr>
+            <tr><td><code>headers</code></td><td>Required or constrained request headers.</td><td>Required header absent or not matching.</td></tr>
+            <tr><td><code>consumes</code></td><td>Media type of the incoming request body, typically from <code>Content-Type</code>.</td><td>Unsupported request format can result in <code>415 Unsupported Media Type</code>.</td></tr>
+            <tr><td><code>produces</code></td><td>Response media types acceptable to the client, using <code>Accept</code>.</td><td>No compatible representation can result in <code>406 Not Acceptable</code>.</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p>Do not add conditions just because they are available. Add them when they are part of the endpoint contract and document required parameters and media types for clients.</p>
+    </section>
+
+    <section class="lesson-section" aria-labelledby="patterns">
+      <h2 id="patterns">5. URI path patterns</h2>
+      <ul>
+        <li><strong>Literal segment:</strong> <code>/api/courses/current</code> matches that exact segment.</li>
+        <li><strong>Path variable:</strong> <code>/api/courses/{id}</code> captures a segment for a handler parameter.</li>
+        <li><strong>Regex-constrained variable:</strong> <code>/api/courses/{id:[0-9]+}</code> restricts the captured segment to digits.</li>
+        <li><strong>Single-segment wildcard:</strong> <code>*</code> matches within a path segment.</li>
+        <li><strong>Multi-segment wildcard:</strong> <code>**</code> can match multiple path segments; place it according to Spring’s path-pattern rules and avoid overly broad routes.</li>
+      </ul>
+      <p>Prefer explicit, resource-oriented paths. Overlapping patterns can make matching harder to reason about; a literal route such as <code>/current</code> and a variable route such as <code>/{id}</code> should be designed and tested together.</p>
+    </section>
+
+    <section class="lesson-section" aria-labelledby="request-flow">
+      <h2 id="request-flow">6. Mapping decision example</h2>
+      <p>For a request to <code>POST /api/courses?mode=validate</code> with <code>Content-Type: application/json</code> and <code>Accept: application/json</code>, Spring evaluates all declared mapping conditions. A candidate handler is eligible only when its path, method, parameter, header, and media-type conditions match.</p>
+      <figure class="diagram">
+        <div class="mermaid" role="img" aria-label="Decision diagram checking route path, HTTP method, request Content-Type, and Accept media type before invoking a handler.">
+flowchart TD
+    A["Incoming request"] --> B{"Path and HTTP method match?"}
+    B -->|No| X["No handler for this request"]
+    B -->|Yes| C{"Required params and headers match?"}
+    C -->|No| X
+    C -->|Yes| D{"Content-Type matches consumes?"}
+    D -->|No| Y["415 Unsupported Media Type"]
+    D -->|Yes| E{"Accept matches produces?"}
+    E -->|No| Z["406 Not Acceptable"]
+    E -->|Yes| F["Bind arguments and invoke handler"]
+        </div>
+        <figcaption>Mapping conditions are conjunctive: all conditions declared for the selected mapping must be satisfied.</figcaption>
+      </figure>
+    </section>
+
+    <section class="lesson-section" aria-labelledby="errors">
+      <h2 id="errors">7. Diagnose common mapping errors</h2>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Symptom</th><th>Likely cause</th><th>What to inspect</th></tr></thead>
+          <tbody>
+            <tr><td><code>404 Not Found</code></td><td>No registered mapping matches the request path and conditions, or the resource itself is absent.</td><td>Class/method path composition, context path, active controller scan, and required conditions.</td></tr>
+            <tr><td><code>405 Method Not Allowed</code></td><td>Path exists, but the request uses an unsupported HTTP method.</td><td>Use the intended verb; check the method-specific mapping.</td></tr>
+            <tr><td><code>415 Unsupported Media Type</code></td><td>Request <code>Content-Type</code> does not match the handler’s <code>consumes</code> condition or available converter.</td><td>Set the correct content type and ensure a converter is available.</td></tr>
+            <tr><td><code>406 Not Acceptable</code></td><td>Client <code>Accept</code> header is incompatible with the handler’s <code>produces</code> condition.</td><td>Request a supported response type or adjust the declared media types.</td></tr>
+            <tr><td>Ambiguous mapping at startup</td><td>Two handler methods register indistinguishable mappings.</td><td>Make method, path, params, headers, or media-type conditions distinct.</td></tr>
+            <tr><td>Handler runs but receives an unexpected value</td><td>Binding name, optionality, or converter expectation differs from the request.</td><td>Check annotation names, Java parameter names, request values, and content type.</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p>Enable targeted Spring MVC mapping diagnostics during local development when necessary. Avoid leaving verbose framework logs enabled in production without a specific operational need.</p>
+    </section>
+
+    <section class="lesson-section" aria-labelledby="testing">
+      <h2 id="testing">8. Test request mappings</h2>
+      <p>Test the mapping contract with MockMvc: verify that the intended method and path reach the right handler, and that unsupported methods or media types produce the expected result. The service can be mocked so the test focuses on the web layer.</p>
+      <pre><code>mockMvc.perform(get("/api/courses/42")
+        .accept(MediaType.APPLICATION_JSON))
+    .andExpect(status().isOk())
+    .andExpect(jsonPath("$.id").value(42));
+
+mockMvc.perform(post("/api/courses")
+        .contentType(MediaType.APPLICATION_JSON)
+        .content("{\"code\":\"CS336B\",\"title\":\"OOPS with Java\"}"))
+    .andExpect(status().isCreated());</code></pre>
+      <p>Include tests for required query parameters or headers, <code>consumes</code>/<code>produces</code> behavior, overlapping routes, and path-variable conversion failures. Mapping tests catch contract regressions before clients encounter them.</p>
+    </section>
+
+    <section class="lesson-section" aria-labelledby="questions">
+      <h2 id="questions">Interview questions</h2>
+      <ol>
+        <li><strong>What does a class-level <code>@RequestMapping</code> do?</strong><br>It defines shared mapping conditions, commonly a path prefix, for handler methods in the controller.</li>
+        <li><strong>How does <code>@GetMapping</code> relate to <code>@RequestMapping</code>?</strong><br>It is a composed annotation that declares a request mapping constrained to the GET method.</li>
+        <li><strong>What is the difference between <code>consumes</code> and <code>produces</code>?</strong><br><code>consumes</code> constrains the incoming request representation; <code>produces</code> constrains the response representation acceptable to the client.</li>
+        <li><strong>What causes an ambiguous mapping?</strong><br>Two or more controller methods register equivalent mapping conditions, leaving Spring unable to choose a unique handler.</li>
+        <li><strong>When is <code>@RequestParam</code> preferable to a path variable?</strong><br>For optional filters, pagination, sorting, or modifiers that do not identify the resource itself.</li>
+        <li><strong>What does the DispatcherServlet do?</strong><br>It acts as Spring MVC’s front controller, coordinating handler selection and request/response processing.</li>
+      </ol>
+    </section>
+
+    <section class="lesson-section" aria-labelledby="quiz">
+      <h2 id="quiz">Quick check</h2>
+      <ol class="quiz">
+        <li>Which mapping attribute constrains the request body media type?<br><span>A. produces &nbsp; B. consumes &nbsp; C. params &nbsp; D. path</span></li>
+        <li>Which response is commonly associated with an unsupported request Content-Type?<br><span>A. 201 &nbsp; B. 404 &nbsp; C. 415 &nbsp; D. 204</span></li>
+        <li>What does a class-level path mapping commonly provide?<br><span>A. A shared path prefix &nbsp; B. Database configuration &nbsp; C. JSON serialization only &nbsp; D. Authentication credentials</span></li>
+      </ol>
+      <details class="answer-key">
+        <summary>Show answers</summary>
+        <p>1. B — <code>consumes</code>. 2. C — <code>415 Unsupported Media Type</code>. 3. A — a shared path prefix.</p>
+      </details>
+    </section>
+  </main>
+  <script src="https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js"></script>
+  <script>
+    if (window.mermaid) {
+      mermaid.initialize({ startOnLoad: true, theme: "base" });
+    }
+  </script>
+</body>
+</html>

@@ -1,0 +1,223 @@
+@import url("../style.css");
+
+.nav {
+  display: flex;
+  flex-wrap: wrap;
+  gap: .65rem;
+  margin: 0 0 1.75rem;
+}
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: .55rem .9rem;
+  border: 1px solid rgba(23, 105, 224, .2);
+  border-radius: 999px;
+  color: #fff;
+  background: var(--blue);
+  font-size: .9rem;
+  font-weight: 650;
+  text-decoration: none;
+  transition: background .2s ease, transform .2s ease;
+}
+
+.btn:hover {
+  transform: translateY(-2px);
+  background: var(--navy);
+}
+
+.container h2 {
+  margin: 1.5rem 0 .5rem;
+  color: var(--navy);
+}
+
+.container h2:first-child {
+  margin-top: 0;
+}
+
+.container h3 {
+  position: relative;
+  z-index: 1;
+  margin: 0 0 .35rem;
+  color: var(--navy);
+}
+
+.container ul {
+  padding-left: 1.4rem;
+  color: #334155;
+}
+
+.container pre {
+  overflow-x: auto;
+  padding: 1rem 1.25rem;
+  border: 1px solid rgba(148, 163, 184, .22);
+  border-radius: 12px;
+  color: #e4efff;
+  background: var(--navy);
+}
+
+header .lesson-subtitle {
+  position: relative;
+  z-index: 1;
+  max-width: 700px;
+  margin: 1rem 0 0;
+  color: #d7e7ff;
+  font-size: clamp(1rem, 2vw, 1.2rem);
+}
+
+.lesson > .nav {
+  margin-bottom: 1.25rem;
+}
+
+.lesson-section {
+  margin: 0 0 1.25rem;
+  padding: clamp(1.2rem, 3vw, 2rem);
+  border: 1px solid rgba(148, 163, 184, .2);
+  border-radius: 16px;
+  background: rgba(255, 255, 255, .86);
+  box-shadow: 0 8px 24px rgba(25, 45, 80, .045);
+}
+
+.lesson-section h2 {
+  margin-top: 0;
+  font-size: clamp(1.25rem, 2.5vw, 1.65rem);
+}
+
+.lesson-section h3 {
+  margin-top: 1.5rem;
+}
+
+.lesson-section p,
+.lesson-section li {
+  color: #475569;
+}
+
+.lesson-section li + li {
+  margin-top: .45rem;
+}
+
+.lesson-section code {
+  padding: .08rem .3rem;
+  border-radius: 4px;
+  color: #174e9e;
+  background: #eaf2ff;
+  font-size: .92em;
+}
+
+.lesson-section pre code {
+  padding: 0;
+  color: inherit;
+  background: transparent;
+  font-size: .9rem;
+}
+
+.callout {
+  margin-top: 1.25rem;
+  padding: 1rem 1.2rem;
+  border-left: 4px solid var(--blue);
+  border-radius: 0 10px 10px 0;
+  color: var(--navy);
+  background: #eef5ff;
+}
+
+.callout ul {
+  margin-bottom: 0;
+}
+
+.infographic {
+  margin: 1.25rem 0;
+  padding: .5rem;
+  border: 1px solid rgba(148, 163, 184, .2);
+  border-radius: 14px;
+  background: #fff;
+}
+
+.infographic svg {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+
+.infographic figcaption {
+  padding: .5rem .75rem .25rem;
+  color: var(--muted);
+  font-size: .88rem;
+}
+
+.table-wrap {
+  overflow-x: auto;
+  margin: 1rem 0;
+  border: 1px solid rgba(148, 163, 184, .25);
+  border-radius: 12px;
+}
+
+.lesson-section table {
+  width: 100%;
+  border-collapse: collapse;
+  text-align: left;
+}
+
+.lesson-section th,
+.lesson-section td {
+  min-width: 130px;
+  padding: .75rem .9rem;
+  border-bottom: 1px solid rgba(148, 163, 184, .2);
+  vertical-align: top;
+}
+
+.lesson-section th {
+  color: var(--navy);
+  background: #edf4ff;
+  font-size: .9rem;
+}
+
+.lesson-section tr:last-child td {
+  border-bottom: 0;
+}
+
+.lesson-section td code {
+  white-space: nowrap;
+}
+
+.quiz > li {
+  margin-bottom: 1rem;
+  color: var(--navy);
+  font-weight: 650;
+}
+
+.quiz span {
+  display: inline-block;
+  margin-top: .3rem;
+  color: #475569;
+  font-weight: 400;
+}
+
+.answer-key {
+  margin-top: 1rem;
+  padding: .8rem 1rem;
+  border: 1px solid rgba(23, 105, 224, .2);
+  border-radius: 10px;
+  background: #f5f9ff;
+}
+
+.answer-key summary {
+  color: var(--blue);
+  cursor: pointer;
+  font-weight: 700;
+}
+
+.answer-key p {
+  margin-bottom: 0;
+}
+
+@media (max-width: 600px) {
+  .lesson-section {
+    padding: 1rem;
+  }
+
+  .lesson-section th,
+  .lesson-section td {
+    padding: .65rem;
+  }
+}

@@ -1,0 +1,266 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#10254b">
+  <meta name="description" content="Learn how Spring Boot CommandLineRunner and ApplicationRunner run startup logic, process arguments, order tasks, and handle errors.">
+  <title>Spring Boot Runners | CS336B</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header>
+    <p class="eyebrow">Unit 5 · Spring Boot &amp; RESTful Web Services</p>
+    <h1>Spring Boot Runners</h1>
+    <p class="lesson-subtitle">Run controlled initialization logic after the Spring application context is ready and before the application reports itself as ready.</p>
+  </header>
+
+  <main class="container lesson">
+    <nav class="nav" aria-label="Lesson navigation">
+      <a class="btn" href="code-structure.html">← Previous: Code Structure</a>
+      <a class="btn" href="unit5.html">Unit 5 Home</a>
+      <a class="btn" href="logger.html">Next: Logger →</a>
+    </nav>
+
+    <section class="lesson-section" aria-labelledby="outcomes">
+      <h2 id="outcomes">Learning outcomes</h2>
+      <p>By the end of this lesson, you should be able to explain when Spring Boot runners execute, select between the two runner interfaces, read command-line arguments, define deterministic runner order, and avoid common startup-task problems.</p>
+      <div class="callout">
+        <strong>Key point:</strong> A runner is a Spring bean whose callback is invoked during application startup after the context has been refreshed. It is suitable for short startup tasks, not for long-running work that should be detached from startup.
+      </div>
+    </section>
+
+    <section class="lesson-section" aria-labelledby="lifecycle">
+      <h2 id="lifecycle">1. Where runners fit in the startup lifecycle</h2>
+      <p>At a high level, Spring Boot prepares the environment, creates and refreshes the application context, instantiates required beans, and starts an embedded web server for a web application. Once the context has been refreshed, it invokes registered <code>ApplicationRunner</code> and <code>CommandLineRunner</code> beans. After the runners complete, the application publishes its ready event, such as <code>ApplicationReadyEvent</code>.</p>
+      <ol>
+        <li>Spring Boot prepares the application environment and context.</li>
+        <li>Beans are created and dependency injection is performed; auto-configuration contributes applicable beans.</li>
+        <li>The application context is refreshed. For a web application, the embedded server is started as part of web-context initialization.</li>
+        <li>Runner callbacks execute in their configured order.</li>
+        <li>After successful startup callbacks, Spring Boot signals that the application is ready.</li>
+      </ol>
+      <p>Runners execute on the startup thread. If a runner blocks or takes a long time, application startup and readiness are delayed. An exception that escapes a runner is a startup failure; it is not silently treated as a successful start.</p>
+    </section>
+
+    <section class="lesson-section" aria-labelledby="interfaces">
+      <h2 id="interfaces">2. The two runner interfaces</h2>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Interface</th><th>Callback</th><th>Arguments provided</th><th>Use when</th></tr></thead>
+          <tbody>
+            <tr><td><code>CommandLineRunner</code></td><td><code>run(String... args)</code></td><td>Raw command-line argument strings</td><td>You want to inspect or process the original argument list.</td></tr>
+            <tr><td><code>ApplicationRunner</code></td><td><code>run(ApplicationArguments args)</code></td><td>Parsed options and non-option arguments</td><td>You want convenient access to option names, values, and non-option arguments.</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p>Both are functional interfaces and can be registered as beans. Implement one or both according to what the task needs. If both types are present, Spring Boot invokes both according to their order; do not rely on an assumed order when it matters—configure and test it.</p>
+    </section>
+
+    <section class="lesson-section" aria-labelledby="commandline">
+      <h2 id="commandline">3. Using <code>CommandLineRunner</code></h2>
+      <p>The callback receives the application arguments as passed to the Java process. For example, with <code>java -jar app.jar --mode=demo input.csv</code>, the runner receives both strings, including the option string as written.</p>
+      <pre><code>package com.example.course.startup;
+
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.boot.CommandLineRunner;
+import org.springframework.stereotype.Component;
+
+@Component
+public class StartupSummary implements CommandLineRunner {
+    private static final Logger log =
+            LoggerFactory.getLogger(StartupSummary.class);
+
+    @Override
+    public void run(String... args) {
+        log.info("Application started with {} argument(s)", args.length);
+    }
+}</code></pre>
+      <p>Use a logger rather than printing to standard output in a real application so output can be filtered and routed through the configured logging system. Avoid logging sensitive command-line values.</p>
+    </section>
+
+    <section class="lesson-section" aria-labelledby="applicationrunner">
+      <h2 id="applicationrunner">4. Using <code>ApplicationRunner</code></h2>
+      <p><code>ApplicationArguments</code> separates option arguments (for example <code>--mode=demo</code>) from non-option arguments (for example <code>input.csv</code>). It also provides access to option names and all values supplied for an option.</p>
+      <pre><code>package com.example.course.startup;
+
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.boot.ApplicationArguments;
+import org.springframework.boot.ApplicationRunner;
+import org.springframework.stereotype.Component;
+import com.example.course.service.ImportService;
+
+@Component
+public class ImportStartupTask implements ApplicationRunner {
+    private static final Logger log =
+            LoggerFactory.getLogger(ImportStartupTask.class);
+
+    private final ImportService importService;
+
+    public ImportStartupTask(ImportService importService) {
+        this.importService = importService;
+    }
+
+    @Override
+    public void run(ApplicationArguments args) {
+        if (args.containsOption("import")) {
+            log.info("Import option supplied; starting import task");
+            importService.importFiles(args.getNonOptionArgs());
+        }
+
+        if (args.containsOption("mode")) {
+            log.info("Mode values: {}", args.getOptionValues("mode"));
+        }
+    }
+}</code></pre>
+      <p>Run it with arguments such as:</p>
+      <pre><code>java -jar course-api.jar --import --mode=demo input.csv</code></pre>
+      <ul>
+        <li><code>containsOption("import")</code> checks whether that option is present.</li>
+        <li><code>getOptionNames()</code> returns the option names.</li>
+        <li><code>getOptionValues("mode")</code> returns values associated with an option; an option may have more than one value.</li>
+        <li><code>getNonOptionArgs()</code> returns arguments that are not option arguments.</li>
+        <li><code>getSourceArgs()</code> provides the original source argument strings.</li>
+      </ul>
+      <p>Argument parsing is not a replacement for validation. If a startup command requires an option, validate that it exists and that its value is valid, then fail with a clear error if it is not.</p>
+    </section>
+
+    <section class="lesson-section" aria-labelledby="bean">
+      <h2 id="bean">5. Registering a runner with <code>@Bean</code></h2>
+      <p>Use a <code>@Bean</code> method when the runner is small or when you want to configure it alongside other application beans. Constructor injection also works naturally for runner classes registered with <code>@Component</code>.</p>
+      <pre><code>package com.example.course.config;
+
+import com.example.course.service.ReferenceDataService;
+import org.springframework.boot.ApplicationRunner;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
+
+@Configuration
+public class StartupConfiguration {
+    @Bean
+    ApplicationRunner loadReferenceData(ReferenceDataService service) {
+        return args -&gt; service.ensureReferenceDataAvailable();
+    }
+}</code></pre>
+      <p>The method parameter is injected by Spring. The runner is managed as a bean, so it can use other services through dependency injection rather than constructing dependencies itself.</p>
+    </section>
+
+    <section class="lesson-section" aria-labelledby="ordering">
+      <h2 id="ordering">6. Ordering multiple runners</h2>
+      <p>When startup work must happen in a specific sequence, give runner beans an explicit order. Lower order values run before higher values. You can use <code>@Order</code> or implement Spring’s <code>Ordered</code> contract.</p>
+      <pre><code>import org.springframework.boot.ApplicationRunner;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
+import org.springframework.core.annotation.Order;
+
+@Configuration
+class StartupTasks {
+    @Bean
+    @Order(1)
+    ApplicationRunner validateConfiguration() {
+        return args -&gt; System.out.println("Validate required configuration");
+    }
+
+    @Bean
+    @Order(2)
+    ApplicationRunner initializeApplication() {
+        return args -&gt; System.out.println("Initialize application state");
+    }
+}</code></pre>
+      <p>Ordering is only meaningful when the work has a real dependency. Prefer one cohesive startup operation that calls its steps in order over unrelated beans coupled through implicit sequencing. Do not depend on bean discovery order.</p>
+    </section>
+
+    <section class="lesson-section" aria-labelledby="usecases">
+      <h2 id="usecases">7. Appropriate uses and alternatives</h2>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Requirement</th><th>Possible approach</th><th>Considerations</th></tr></thead>
+          <tbody>
+            <tr><td>Validate required configuration and fail fast</td><td>Runner</td><td>Keep validation quick and report actionable errors.</td></tr>
+            <tr><td>Load small, idempotent reference data</td><td>Runner or database migration tool</td><td>Use a migration system for schema changes and durable versioned data migrations.</td></tr>
+            <tr><td>Run a one-off command and exit</td><td>Runner plus explicit application lifecycle management</td><td>A web application may keep its server alive; do not assume a runner automatically makes the process exit.</td></tr>
+            <tr><td>React to successful application readiness</td><td><code>ApplicationReadyEvent</code> listener</td><td>Use an event listener when event semantics are clearer than a runner callback.</td></tr>
+            <tr><td>Perform a slow or recurring job</td><td>Queue, scheduler, or managed background worker</td><td>Do not block application readiness with unbounded work.</td></tr>
+            <tr><td>Initialize every database instance safely</td><td>Database migration tool or idempotent initialization</td><td>Account for multiple application replicas starting concurrently.</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="lesson-section" aria-labelledby="reliability">
+      <h2 id="reliability">8. Reliability, idempotency, and errors</h2>
+      <ul>
+        <li><strong>Keep startup bounded:</strong> readiness should not wait on a long import, external crawl, or indefinite retry loop. Move substantial work to an asynchronous job or queue and expose its status.</li>
+        <li><strong>Make repeatable work idempotent:</strong> deployments restart and scale out. A runner that inserts records on every startup can create duplicates. Use unique constraints, upserts, migrations, or an explicit completion record.</li>
+        <li><strong>Plan for multiple replicas:</strong> each application instance runs its own runner. A database-backed task may need a migration tool, distributed lock, or another coordination mechanism if it must execute once across the deployment.</li>
+        <li><strong>Handle failures deliberately:</strong> if the application must not serve traffic without successful initialization, allow failure to stop startup and log useful context. If the task is optional, record the failure clearly and define a recovery mechanism.</li>
+        <li><strong>Use bounded external calls:</strong> configure connection and read timeouts for network or database work; avoid indefinite startup hangs.</li>
+        <li><strong>Do not assume transactional behavior:</strong> a runner callback is not automatically one transaction. Put transactional operations in a suitable proxied service method and consider partial completion and retry behavior.</li>
+        <li><strong>Do not use runners for secrets or credentials:</strong> avoid printing raw arguments or sensitive configuration to logs.</li>
+      </ul>
+    </section>
+
+    <section class="lesson-section" aria-labelledby="testing">
+      <h2 id="testing">9. Testing runner logic</h2>
+      <p>Keep business logic in a service and let the runner coordinate the startup call. This makes the service independently unit-testable and keeps the runner thin. A runner’s argument-handling behavior can also be tested directly.</p>
+      <pre><code>      import static org.mockito.Mockito.verify;
+
+import java.util.List;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.InjectMocks;
+import org.mockito.Mock;
+import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.boot.DefaultApplicationArguments;
+
+@ExtendWith(MockitoExtension.class)
+class ImportStartupTaskTest {
+    @Mock
+    ImportService importService;
+
+    @InjectMocks
+    ImportStartupTask runner;
+
+    @Test
+    void importsNonOptionArgumentsWhenImportOptionIsPresent()
+            throws Exception {
+        var args = new DefaultApplicationArguments(
+                "--import", "input.csv");
+
+        runner.run(args);
+
+        verify(importService).importFiles(List.of("input.csv"));
+    }
+}</code></pre>
+      <p>This example assumes an <code>ImportService</code> with an <code>importFiles(List&lt;String&gt; paths)</code> method and the Mockito support included by the usual Spring Boot test starter. For application-level integration tests, use a Spring Boot test context and verify observable behavior. Avoid tests that depend on incidental bean ordering; explicitly declare order if order is part of the requirement.</p>
+    </section>
+
+    <section class="lesson-section" aria-labelledby="questions">
+      <h2 id="questions">Interview questions</h2>
+      <ol>
+        <li><strong>When does Spring Boot invoke runner beans?</strong><br>After the application context has been refreshed and before it signals that the application is ready.</li>
+        <li><strong>What is the difference between <code>CommandLineRunner</code> and <code>ApplicationRunner</code>?</strong><br>The former receives raw strings; the latter receives parsed <code>ApplicationArguments</code> with option and non-option argument access.</li>
+        <li><strong>How do you order multiple runners?</strong><br>Use <code>@Order</code> or implement <code>Ordered</code>, and avoid relying on bean discovery order.</li>
+        <li><strong>What happens if a runner throws an exception?</strong><br>An uncaught exception propagates as a startup failure; the application does not complete normal startup.</li>
+        <li><strong>Why should startup tasks be idempotent?</strong><br>Runners execute on every application start and on every replica, so repeating the task should not corrupt or duplicate state.</li>
+        <li><strong>When might an event listener be preferable?</strong><br>When reacting to a specific lifecycle event, such as application readiness, is more appropriate than registering a startup callback.</li>
+      </ol>
+    </section>
+
+    <section class="lesson-section" aria-labelledby="quiz">
+      <h2 id="quiz">Quick check</h2>
+      <ol class="quiz">
+        <li>Which interface provides parsed option names and values?<br><span>A. CommandLineRunner &nbsp; B. ApplicationRunner &nbsp; C. Ordered &nbsp; D. ApplicationContext</span></li>
+        <li>When are runner callbacks invoked?<br><span>A. Before the context is created &nbsp; B. After context refresh and before application-ready notification &nbsp; C. On every HTTP request &nbsp; D. Only during tests</span></li>
+        <li>Why should a runner’s data initialization usually be idempotent?<br><span>A. To avoid dependency injection &nbsp; B. It can execute again on restarts and on multiple replicas &nbsp; C. It disables logging &nbsp; D. It makes arguments optional</span></li>
+      </ol>
+      <details class="answer-key">
+        <summary>Show answers</summary>
+        <p>1. B — <code>ApplicationRunner</code>. 2. B — after context refresh and before the ready notification. 3. B — runners execute on each application instance at startup.</p>
+      </details>
+    </section>
+  </main>
+</body>
+</html>

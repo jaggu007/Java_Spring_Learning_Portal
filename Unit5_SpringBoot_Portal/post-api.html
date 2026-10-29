@@ -1,0 +1,412 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#10254b">
+  <meta name="description" content="Learn how to build a Spring Boot POST API with request DTO validation, service and repository layers, 201 Created responses, error handling, and tests.">
+  <title>POST API in Spring Boot | CS336B</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header>
+    <p class="eyebrow">Unit 5 · Spring Boot &amp; RESTful Web Services</p>
+    <h1>Building a POST API</h1>
+    <p class="lesson-subtitle">Create resources safely with Spring Boot, validated JSON input, database persistence, and correct HTTP responses.</p>
+  </header>
+
+  <main class="container lesson">
+    <nav class="nav" aria-label="Lesson navigation">
+      <a class="btn" href="get-api.html">← Previous: GET API</a>
+      <a class="btn" href="unit5.html">Unit 5 Home</a>
+      <a class="btn" href="put-api.html">Next: PUT API →</a>
+    </nav>
+
+    <section class="lesson-section" aria-labelledby="outcomes">
+      <h2 id="outcomes">Learning outcomes</h2>
+      <p>After this lesson, you should be able to create a POST endpoint, receive and validate JSON using a request DTO, persist a new resource through service and repository layers, return <code>201 Created</code> with a resource location, and test successful and rejected requests.</p>
+      <div class="callout">
+        <strong>POST is not generally idempotent.</strong> Repeating a create request may create another resource. For retryable operations, define duplicate handling or an idempotency-key strategy rather than assuming clients will send a request only once.
+      </div>
+    </section>
+
+    <section class="lesson-section" aria-labelledby="flow">
+      <h2 id="flow">1. POST request lifecycle</h2>
+      <p>A POST request normally sends a representation in the body. Spring converts the JSON to a request DTO, validates it, and passes it to application logic. If creation succeeds, the server returns a success status and identifies the new resource.</p>
+      <figure class="infographic">
+        <svg viewBox="0 0 960 230" role="img" aria-labelledby="post-flow-title post-flow-desc" xmlns="http://www.w3.org/2000/svg">
+          <title id="post-flow-title">Spring Boot POST request flow</title>
+          <desc id="post-flow-desc">A client sends JSON to a Spring controller, which validates the request, calls a service and repository, persists a resource, and responds with 201 Created and a Location header.</desc>
+          <rect x="12" y="20" width="936" height="190" rx="18" fill="#f3f7ff" stroke="#d7e4f6"/>
+          <g font-family="Arial, sans-serif" text-anchor="middle">
+            <rect x="30" y="75" width="145" height="76" rx="12" fill="#dcecff"/>
+            <text x="102" y="105" fill="#10254b" font-size="17" font-weight="700">Client</text>
+            <text x="102" y="128" fill="#475569" font-size="13">POST + JSON</text>
+            <path d="M179 113 H216" stroke="#1769e0" stroke-width="3"/><path d="M216 113 l-10 -7 v14 z" fill="#1769e0"/>
+            <rect x="222" y="75" width="145" height="76" rx="12" fill="#fff" stroke="#b8cdea"/>
+            <text x="294" y="105" fill="#10254b" font-size="17" font-weight="700">Controller</text>
+            <text x="294" y="128" fill="#475569" font-size="13">Bind + validate</text>
+            <path d="M371 113 H408" stroke="#1769e0" stroke-width="3"/><path d="M408 113 l-10 -7 v14 z" fill="#1769e0"/>
+            <rect x="414" y="75" width="145" height="76" rx="12" fill="#fff" stroke="#b8cdea"/>
+            <text x="486" y="105" fill="#10254b" font-size="17" font-weight="700">Service</text>
+            <text x="486" y="128" fill="#475569" font-size="13">Apply rules</text>
+            <path d="M563 113 H600" stroke="#1769e0" stroke-width="3"/><path d="M600 113 l-10 -7 v14 z" fill="#1769e0"/>
+            <rect x="606" y="75" width="145" height="76" rx="12" fill="#fff" stroke="#b8cdea"/>
+            <text x="678" y="105" fill="#10254b" font-size="17" font-weight="700">Repository</text>
+            <text x="678" y="128" fill="#475569" font-size="13">Persist resource</text>
+            <path d="M755 113 H792" stroke="#1769e0" stroke-width="3"/><path d="M792 113 l-10 -7 v14 z" fill="#1769e0"/>
+            <rect x="798" y="75" width="130" height="76" rx="12" fill="#dff5ee"/>
+            <text x="863" y="103" fill="#145744" font-size="17" font-weight="700">201 Created</text>
+            <text x="863" y="126" fill="#33695c" font-size="13">Location + JSON</text>
+            <text x="480" y="184" fill="#64748b" font-size="13">Validation or persistence errors return an appropriate 4xx/5xx response</text>
+          </g>
+        </svg>
+        <figcaption>Typical layered request flow. Validation errors should be returned before creating the resource.</figcaption>
+      </figure>
+    </section>
+
+    <section class="lesson-section" aria-labelledby="http">
+      <h2 id="http">2. HTTP contract for resource creation</h2>
+      <p>A typical request sends JSON with <code>Content-Type: application/json</code>. A successful create commonly returns <code>201 Created</code>, a response representation, and a <code>Location</code> header pointing to the new resource.</p>
+      <pre><code>POST /api/courses HTTP/1.1
+Content-Type: application/json
+Accept: application/json
+
+{
+  "code": "CS336B",
+  "title": "OOPS with Java",
+  "credits": 4
+}</code></pre>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Status</th><th>Meaning in a POST API</th></tr></thead>
+          <tbody>
+            <tr><td><code>201 Created</code></td><td>Resource was created; include its location when practical.</td></tr>
+            <tr><td><code>200 OK</code></td><td>Operation succeeded and a response body is returned, but creation semantics may be less explicit.</td></tr>
+            <tr><td><code>202 Accepted</code></td><td>Work was accepted for asynchronous processing and is not yet complete.</td></tr>
+            <tr><td><code>400 Bad Request</code></td><td>Malformed JSON, conversion failure, or invalid request fields.</td></tr>
+            <tr><td><code>409 Conflict</code></td><td>Request conflicts with current state, such as a duplicate unique course code.</td></tr>
+            <tr><td><code>415 Unsupported Media Type</code></td><td>Request body format is not supported by the endpoint.</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="lesson-section" aria-labelledby="project">
+      <h2 id="project">3. Add a POST API to a Spring Boot project</h2>
+      <p>In a Spring Initializr project, select Spring Web, Validation, and Spring Data JPA. Add a database driver that matches your chosen database. Example Maven dependencies:</p>
+      <pre><code>&lt;dependency&gt;
+    &lt;groupId&gt;org.springframework.boot&lt;/groupId&gt;
+    &lt;artifactId&gt;spring-boot-starter-web&lt;/artifactId&gt;
+&lt;/dependency&gt;
+&lt;dependency&gt;
+    &lt;groupId&gt;org.springframework.boot&lt;/groupId&gt;
+    &lt;artifactId&gt;spring-boot-starter-validation&lt;/artifactId&gt;
+&lt;/dependency&gt;
+&lt;dependency&gt;
+    &lt;groupId&gt;org.springframework.boot&lt;/groupId&gt;
+    &lt;artifactId&gt;spring-boot-starter-data-jpa&lt;/artifactId&gt;
+&lt;/dependency&gt;</code></pre>
+      <p>A typical structure separates the transport contract, HTTP handler, application logic, and persistence:</p>
+      <pre><code>src/main/java/com/example/course/
+├── controller/CourseController.java
+├── dto/CreateCourseRequest.java
+├── dto/CourseResponse.java
+├── entity/Course.java
+├── exception/DuplicateCourseCodeException.java
+├── exception/ApiExceptionHandler.java
+├── repository/CourseRepository.java
+└── service/CourseService.java</code></pre>
+    </section>
+
+    <section class="lesson-section" aria-labelledby="dto">
+      <h2 id="dto">4. Define request and response DTOs</h2>
+      <p>A request DTO limits what the client can set. Do not bind a JPA entity directly from untrusted input: that can accidentally expose or allow modification of IDs, roles, ownership, or audit fields.</p>
+      <pre><code>package com.example.course.dto;
+
+import jakarta.validation.constraints.Max;
+import jakarta.validation.constraints.Min;
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.Size;
+
+public record CreateCourseRequest(
+        @NotBlank
+        @Size(max = 20)
+        String code,
+
+        @NotBlank
+        @Size(max = 120)
+        String title,
+
+        @Min(1)
+        @Max(6)
+        int credits
+) {}</code></pre>
+      <pre><code>package com.example.course.dto;
+
+public record CourseResponse(
+        long id,
+        String code,
+        String title,
+        int credits
+) {}</code></pre>
+      <p>Use a response DTO to control the public representation. The client does not choose the generated ID; the server creates and returns it.</p>
+    </section>
+
+    <section class="lesson-section" aria-labelledby="entity">
+      <h2 id="entity">5. Persist the resource</h2>
+      <p>This example uses JPA. A database uniqueness constraint is essential even if the service checks for duplicates: two concurrent requests can both pass an application-level check before either inserts.</p>
+      <pre><code>package com.example.course.entity;
+
+import jakarta.persistence.Column;
+import jakarta.persistence.Entity;
+import jakarta.persistence.GeneratedValue;
+import jakarta.persistence.GenerationType;
+import jakarta.persistence.Id;
+import jakarta.persistence.Table;
+
+@Entity
+@Table(name = "courses")
+public class Course {
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    private Long id;
+
+    @Column(nullable = false, unique = true, length = 20)
+    private String code;
+
+    @Column(nullable = false, length = 120)
+    private String title;
+
+    @Column(nullable = false)
+    private int credits;
+
+    protected Course() {
+    }
+
+    public Course(String code, String title, int credits) {
+        this.code = code;
+        this.title = title;
+        this.credits = credits;
+    }
+
+    public Long getId() { return id; }
+    public String getCode() { return code; }
+    public String getTitle() { return title; }
+    public int getCredits() { return credits; }
+}</code></pre>
+      <pre><code>package com.example.course.repository;
+
+import com.example.course.entity.Course;
+import org.springframework.data.jpa.repository.JpaRepository;
+
+public interface CourseRepository extends JpaRepository&lt;Course, Long&gt; {
+    boolean existsByCode(String code);
+}</code></pre>
+      <p>In production, use schema migrations such as Flyway or Liquibase to manage database constraints and schema evolution. Do not depend on automatic schema creation as a migration strategy.</p>
+    </section>
+
+    <section class="lesson-section" aria-labelledby="service">
+      <h2 id="service">6. Implement creation in the service layer</h2>
+      <p>The service owns the creation use case: apply business rules, persist the entity, and map it to the response DTO. The transaction keeps the write operation within a consistent database boundary.</p>
+      <pre><code>package com.example.course.service;
+
+import com.example.course.dto.CourseResponse;
+import com.example.course.dto.CreateCourseRequest;
+import com.example.course.entity.Course;
+import com.example.course.exception.DuplicateCourseCodeException;
+import com.example.course.repository.CourseRepository;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
+@Service
+public class CourseService {
+    private final CourseRepository repository;
+
+    public CourseService(CourseRepository repository) {
+        this.repository = repository;
+    }
+
+    @Transactional
+    public CourseResponse create(CreateCourseRequest request) {
+        String normalizedCode = request.code().trim();
+        if (repository.existsByCode(normalizedCode)) {
+            throw new DuplicateCourseCodeException(request.code());
+        }
+
+        Course course = new Course(
+                normalizedCode,
+                request.title().trim(),
+                request.credits());
+
+        Course saved = repository.saveAndFlush(course);
+        return toResponse(saved);
+    }
+
+    private CourseResponse toResponse(Course course) {
+        return new CourseResponse(
+                course.getId(),
+                course.getCode(),
+                course.getTitle(),
+                course.getCredits());
+    }
+}</code></pre>
+      <p>The unique database constraint remains the final authority when concurrent requests race. The application-level check improves the common response path, but it cannot prevent that race. Handle a database integrity violation at the API boundary as a generic conflict or inspect the violated constraint using database-aware translation; do not claim every integrity failure is necessarily a duplicate code.</p>
+      <h3>Define the domain exception</h3>
+      <pre><code>package com.example.course.exception;
+
+public class DuplicateCourseCodeException extends RuntimeException {
+    public DuplicateCourseCodeException(String code) {
+        super("A course with code " + code + " already exists");
+    }
+}</code></pre>
+    </section>
+
+    <section class="lesson-section" aria-labelledby="controller">
+      <h2 id="controller">7. Create the controller endpoint</h2>
+      <p>Use <code>@Valid</code> to trigger request DTO validation. Build a resource URI and return it through the <code>Location</code> header with <code>201 Created</code>.</p>
+      <pre><code>package com.example.course.controller;
+
+import java.net.URI;
+
+import com.example.course.dto.CourseResponse;
+import com.example.course.dto.CreateCourseRequest;
+import com.example.course.service.CourseService;
+import jakarta.validation.Valid;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.servlet.support.ServletUriComponentsBuilder;
+
+@RestController
+@RequestMapping("/api/courses")
+public class CourseController {
+    private final CourseService courseService;
+
+    public CourseController(CourseService courseService) {
+        this.courseService = courseService;
+    }
+
+    @PostMapping
+    public ResponseEntity&lt;CourseResponse&gt; create(
+            @Valid @RequestBody CreateCourseRequest request) {
+        CourseResponse created = courseService.create(request);
+        URI location = ServletUriComponentsBuilder
+                .fromCurrentRequest()
+                .path("/{id}")
+                .buildAndExpand(created.id())
+                .toUri();
+
+        return ResponseEntity.created(location).body(created);
+    }
+}</code></pre>
+      <p>The resulting response has status <code>201 Created</code>, a <code>Location: /api/courses/{id}</code> header, and the created resource representation in its body.</p>
+    </section>
+
+    <section class="lesson-section" aria-labelledby="errors">
+      <h2 id="errors">8. Handle validation and duplicate errors</h2>
+      <p>Map expected client errors to clear 4xx responses. Spring’s <code>ProblemDetail</code> provides a standard error representation on supported Spring versions.</p>
+      <pre><code>import com.example.course.exception.DuplicateCourseCodeException;
+import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ProblemDetail;
+import org.springframework.web.bind.annotation.ExceptionHandler;
+import org.springframework.web.bind.annotation.RestControllerAdvice;
+
+@RestControllerAdvice
+public class ApiExceptionHandler {
+    @ExceptionHandler(DuplicateCourseCodeException.class)
+    ProblemDetail handleDuplicate(DuplicateCourseCodeException exception) {
+        ProblemDetail problem =
+                ProblemDetail.forStatus(HttpStatus.CONFLICT);
+        problem.setTitle("Course code already exists");
+        problem.setDetail("Choose a different course code.");
+        return problem;
+    }
+
+    @ExceptionHandler(DataIntegrityViolationException.class)
+    ProblemDetail handleConstraintConflict(
+            DataIntegrityViolationException exception) {
+        ProblemDetail problem =
+                ProblemDetail.forStatus(HttpStatus.CONFLICT);
+        problem.setTitle("Request conflicts with existing data");
+        problem.setDetail("Review the resource values and try again.");
+        return problem;
+    }
+}</code></pre>
+      <p>Malformed JSON and Bean Validation failures are normally client errors. Avoid returning raw exception messages, database details, or stack traces to clients. Log unexpected server failures with appropriate context and keep error response formats consistent.</p>
+    </section>
+
+    <section class="lesson-section" aria-labelledby="test">
+      <h2 id="test">9. Test the POST endpoint</h2>
+      <p>Test the HTTP contract, not just the service method. Cover valid JSON, invalid fields, duplicate codes, returned status, response body, and the <code>Location</code> header.</p>
+      <pre><code>mockMvc.perform(post("/api/courses")
+        .contentType(MediaType.APPLICATION_JSON)
+        .accept(MediaType.APPLICATION_JSON)
+        .content("""
+            {"code":"CS336B","title":"OOPS with Java","credits":4}
+            """))
+    .andExpect(status().isCreated())
+    .andExpect(header().string(
+            "Location", endsWith("/api/courses/42")))
+    .andExpect(jsonPath("$.id").value(42))
+    .andExpect(jsonPath("$.code").value("CS336B"));</code></pre>
+      <p>Also test blank or oversized values, malformed JSON, unsupported content types, duplicate values, and authorization failures. Use a test database or repository mocks depending on whether the test is a web slice or an integration test.</p>
+    </section>
+
+    <section class="lesson-section" aria-labelledby="call">
+      <h2 id="call">10. Call the API</h2>
+      <p>Start the application and send a JSON request:</p>
+      <pre><code>./mvnw spring-boot:run
+
+curl -i \
+  -X POST http://localhost:8080/api/courses \
+  -H "Content-Type: application/json" \
+  -H "Accept: application/json" \
+  -d '{"code":"CS336B","title":"OOPS with Java","credits":4}'</code></pre>
+      <p>Inspect the status line and headers. A successful response should include <code>201 Created</code> and a <code>Location</code> header. On Windows, use <code>mvnw.cmd spring-boot:run</code>.</p>
+    </section>
+
+    <section class="lesson-section" aria-labelledby="reliability">
+      <h2 id="reliability">11. Security and reliability considerations</h2>
+      <ul>
+        <li><strong>Validate and authorize:</strong> input validation does not establish that the caller is allowed to create the resource.</li>
+        <li><strong>Prevent mass assignment:</strong> accept narrow DTOs, not entities with fields the client should not control.</li>
+        <li><strong>Enforce database constraints:</strong> application checks alone cannot prevent races or concurrent duplicates.</li>
+        <li><strong>Bound request sizes:</strong> limit JSON body size, string lengths, and nested collection sizes.</li>
+        <li><strong>Handle retries:</strong> if duplicate creation on retry is unacceptable, define idempotency keys and store their outcome safely.</li>
+        <li><strong>Use HTTPS:</strong> protect submitted data in transit.</li>
+        <li><strong>Do not log secrets or full sensitive bodies:</strong> log safe identifiers and outcomes, with redaction where required.</li>
+      </ul>
+    </section>
+
+    <section class="lesson-section" aria-labelledby="questions">
+      <h2 id="questions">Interview questions</h2>
+      <ol>
+        <li><strong>What is the common status code for a successful resource creation?</strong><br><code>201 Created</code>, often with a <code>Location</code> header identifying the new resource.</li>
+        <li><strong>What does <code>@RequestBody</code> do in a POST endpoint?</strong><br>It asks Spring MVC to deserialize the request body into the declared Java type using a message converter.</li>
+        <li><strong>What does <code>@Valid</code> do?</strong><br>It triggers Bean Validation constraints declared on the request DTO.</li>
+        <li><strong>Why use request DTOs instead of entities?</strong><br>DTOs define the public contract and prevent clients from setting internal or privileged fields.</li>
+        <li><strong>Why keep a unique database constraint if the service checks for duplicates?</strong><br>Concurrent requests can pass the application check simultaneously; the database constraint enforces uniqueness atomically.</li>
+        <li><strong>Is POST idempotent?</strong><br>Not generally. Repeated requests may create multiple resources unless the API defines deduplication or idempotency behavior.</li>
+      </ol>
+    </section>
+
+    <section class="lesson-section" aria-labelledby="quiz">
+      <h2 id="quiz">Quick check</h2>
+      <ol class="quiz">
+        <li>Which status code best represents successful resource creation?<br><span>A. 200 &nbsp; B. 201 &nbsp; C. 204 &nbsp; D. 404</span></li>
+        <li>Which header can identify the newly created resource?<br><span>A. Accept &nbsp; B. Content-Length &nbsp; C. Location &nbsp; D. Cache-Control</span></li>
+        <li>What is the purpose of <code>@Valid</code> on a request body?<br><span>A. It authenticates the user &nbsp; B. It triggers DTO constraint validation &nbsp; C. It creates a database row &nbsp; D. It selects a route</span></li>
+        <li>Why is a database unique constraint still needed when the service checks for duplicates?<br><span>A. To serialize JSON &nbsp; B. To prevent concurrent duplicate inserts &nbsp; C. To enable GET requests &nbsp; D. To set the HTTP Location header</span></li>
+      </ol>
+      <details class="answer-key">
+        <summary>Show answers</summary>
+        <p>1. B — <code>201 Created</code>. 2. C — <code>Location</code>. 3. B — it triggers validation. 4. B — the database enforces uniqueness under concurrent requests.</p>
+      </details>
+    </section>
+  </main>
+</body>
+</html>
